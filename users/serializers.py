@@ -15,10 +15,9 @@ class SendOTPSerializer(serializers.Serializer):
             raise serializers.ValidationError("شماره موبایل معتبر نیست.")
         return value
 
-
 class VerifyOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
-    otp = serializers.CharField()
+    phone_number = serializers.CharField(max_length=15)
+    otp = serializers.CharField(max_length=6)
     referral_code = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
@@ -26,25 +25,26 @@ class VerifyOTPSerializer(serializers.Serializer):
         otp = attrs.get("otp")
 
         try:
-            otp_record = PhoneOTP.objects.filter(phone_number=phone, purpose='login', is_verified=False).latest("created_at")
+            otp_record = PhoneOTP.objects.filter(phone_number=phone, purpose='registration', is_verified=False).latest("created_at")
         except PhoneOTP.DoesNotExist:
             raise serializers.ValidationError("کد تأیید پیدا نشد، لطفاً مجدداً درخواست دهید.")
 
-        if otp_record.failed_attempts >= 5:
+        # اگر تعداد تلاش‌های ناموفق بیشتر از حد باشد
+        if hasattr(otp_record, 'failed_attempts') and otp_record.failed_attempts >= 5:
             raise serializers.ValidationError("تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً مجدداً درخواست کد نمایید.")
 
-        if timezone.now() > otp_record.expiration_time:
+        # بررسی منقضی شدن کد
+        if otp_record.is_expired():
             raise serializers.ValidationError("کد منقضی شده است.")
 
-        hashed_input = hashlib.sha256(otp.encode()).hexdigest()
-        if otp_record.code != hashed_input:
-            otp_record.failed_attempts += 1
-            otp_record.save()
+        # مقایسه کد ارسالی (بدون هش) با کد ذخیره شده (در مدل شما بدون هش ذخیره شده است)
+        if otp_record.code != otp:
+            # اگر خواستی می‌تونی فیلد failed_attempts رو تو مدل اضافه کنی و اینجا افزایش بدی
             raise serializers.ValidationError("کد تأیید اشتباه است.")
 
         return attrs
-
-
+    
+    
 class CompleteProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(required=True)
     national_code = serializers.CharField(required=True)

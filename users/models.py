@@ -41,6 +41,11 @@ class User(AbstractBaseUser, PermissionsMixin):
             RegexValidator(regex=r'^\d{10}$', message="کد ملی باید ۱۰ رقم باشد.")
         ]
     )
+    VEHICLE_TYPE_CHOICES = [
+        ('van', 'ون'),
+        ('car', 'سواری'),
+        ('minibus', 'مینی بوس'),
+    ]
 
     first_name = models.CharField(max_length=30, blank=True, verbose_name="نام")
     last_name = models.CharField(max_length=30, blank=True, verbose_name="نام خانوادگی")
@@ -49,6 +54,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     city = models.CharField(max_length=100, blank=True, null=True, verbose_name="شهر")
     state = models.CharField(max_length=100, blank=True, null=True, verbose_name="استان")
     image = models.URLField(null=True, blank=True, verbose_name="عکس پروفایل")
+    
+    iranian_plate_validator = RegexValidator(
+        regex=r'^\d{2,3}[الف-ی]\d{3,4}$',
+        message='شماره پلاک باید به فرمت صحیح پلاک خودروهای ایران باشد، مثلا ۱۲الف۳۴۵۶'
+    )
+    plate_number = models.CharField(
+        max_length=10,
+        unique=True,
+        null=True,
+        blank=True,
+        validators=[iranian_plate_validator],
+        verbose_name='شماره پلاک'
+    )
+    vehicle_type = models.CharField(
+        max_length=10,
+        choices=VEHICLE_TYPE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='نوع ماشین'
+    )
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -95,6 +120,11 @@ class User(AbstractBaseUser, PermissionsMixin):
             code = ''.join(random.choices(characters, k=length))
             if not User.objects.filter(referral_code=code).exists():
                 return code
+            
+    
+    @property
+    def id(self):
+        return self.user_uuid
 
 
 class PhoneOTP(models.Model):

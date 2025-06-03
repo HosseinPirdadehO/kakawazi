@@ -63,7 +63,6 @@ class SendOTPView(APIView):
         PhoneOTP.create_and_send_otp(phone_number)
         return Response({"detail": "کد تایید ارسال شد."}, status=status.HTTP_200_OK)
 
-
 class VerifyOTPView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
@@ -73,14 +72,19 @@ class VerifyOTPView(APIView):
         referral_code = serializer.validated_data.get("referral_code")
 
         with transaction.atomic():
-            user, created = get_or_create_user(phone_number)
+            user, created = User.objects.get_or_create(phone_number=phone_number)
             user.is_phone_verified = True
             user.last_login = timezone.now()
             user.save()
 
-            if created:
-                create_referral_if_needed(referral_code, user)
+            # اگر رفرال کد بود، می‌تونی اینجا ایجاد رفرال رو اضافه کنی
+            if created and referral_code:
+                inviter = User.objects.filter(referral_code=referral_code).first()
+                if inviter and inviter != user:
+                    from .models import Referral
+                    Referral.objects.get_or_create(inviter=inviter, invited=user)
 
+            # تولید توکن (اینجا فرض شده تابعی داری برای تولید JWT)
             tokens = generate_tokens_for_user(user)
 
         return Response({**tokens, "is_new_user": created}, status=status.HTTP_200_OK)
