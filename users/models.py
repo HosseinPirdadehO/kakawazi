@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 import hashlib
+import random
+import string
+import logging
+from datetime import timedelta
+import uuid
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from .sms_service import send_sms
-import random
-import string
-import uuid
-from datetime import timedelta
-import logging
 
 
 class UserManager(BaseUserManager):
@@ -29,13 +29,17 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    user_uuid = models.UUIDField(primary_key=True, default=uuid.uuid4,
-                                 editable=False, unique=True, verbose_name="شناسه کاربر")
-    phone_number = models.CharField(max_length=15, unique=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    phone_number = models.CharField(
+        max_length=15, unique=True, verbose_name="شماره موبایل")
     is_phone_verified = models.BooleanField(default=False)
 
     referral_code = models.CharField(
-        max_length=10, unique=True, blank=True, null=True, verbose_name="کد دعوت")
+        max_length=10, unique=True, blank=True, null=True, verbose_name="کد دعوت"
+    )
+    referral = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL, verbose_name="دعوت‌کننده", related_name='referrals'
+    )
 
     national_code = models.CharField(
         max_length=10,
@@ -47,10 +51,11 @@ class User(AbstractBaseUser, PermissionsMixin):
                            message="کد ملی باید ۱۰ رقم باشد.")
         ]
     )
+
     VEHICLE_TYPE_CHOICES = [
         ('van', 'ون'),
-        ('car', 'سواری سب'),
-        ('minibus', 'مینی بوس'),
+        ('car', 'سواری'),
+        ('minibus', 'مینی‌بوس'),
     ]
     ROLE_CHOICES = [
         ('school_manager', 'مدیر مدرسه'),
@@ -71,16 +76,11 @@ class User(AbstractBaseUser, PermissionsMixin):
                              null=True, verbose_name="استان")
     image = models.URLField(null=True, blank=True, verbose_name="عکس پروفایل")
 
-    # iranian_plate_validator = RegexValidator(
-    #     regex=r'^\d{2}[الف-ی]\d{3}\s?\d{2}$',
-    #     message='شماره پلاک باید به فرمت صحیح پلاک خودروهای ایران باشد، مثلا ۲۲۲ی۲۲ ۲۲'
-    # )
     plate_number = models.CharField(
         max_length=11,
         unique=True,
         null=True,
         blank=True,
-        # validators=[iranian_plate_validator],
         verbose_name='شماره پلاک'
     )
     type_of_car = models.CharField(
@@ -108,10 +108,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         ('active', 'فعال'),
         ('inactive', 'غیرفعال'),
         ('deleted', 'حذف‌شده'),
-        ('pending', 'در انتظار تایید'),
+        ('pending', 'در انتظار تأیید'),
     ]
     status = models.CharField(
-        max_length=10, choices=STATUS_CHOICES, default='active')
+        max_length=10, choices=STATUS_CHOICES, default='active'
+    )
 
     objects = UserManager()
 
@@ -145,10 +146,6 @@ class User(AbstractBaseUser, PermissionsMixin):
             if not User.objects.filter(referral_code=code).exists():
                 return code
 
-    @property
-    def id(self):
-        return self.user_uuid
-
 
 class PhoneOTP(models.Model):
     PURPOSE_CHOICES = (
@@ -158,7 +155,7 @@ class PhoneOTP(models.Model):
     )
 
     phone_number = models.CharField(max_length=15)
-    code = models.CharField(max_length=128)  # هش‌شده
+    code = models.CharField(max_length=128)  # ذخیره هش‌شده
     created_at = models.DateTimeField(auto_now_add=True)
     is_verified = models.BooleanField(default=False)
     purpose = models.CharField(
@@ -166,8 +163,8 @@ class PhoneOTP(models.Model):
     failed_attempts = models.IntegerField(default=0)
 
     class Meta:
-        verbose_name = "کد تایید"
-        verbose_name_plural = "کدهای تایید"
+        verbose_name = "کد تأیید"
+        verbose_name_plural = "کدهای تأیید"
         ordering = ['-created_at']
 
     def __str__(self):
@@ -181,14 +178,12 @@ class PhoneOTP(models.Model):
         self.save(update_fields=['failed_attempts'])
 
     def verify_code(self, input_code):
-        """
-        بررسی کد ارسالی توسط کاربر با کد ذخیره‌شده (هش‌شده) و مدیریت تعداد تلاش‌ها
-        """
         if self.is_expired():
+            print("کد منقضی شده است.")
             return False, "کد منقضی شده است."
 
         input_hash = hashlib.sha256(input_code.encode()).hexdigest()
-
+        print(f"input_hash: {input_hash}, stored_code: {self.code}")
         if input_hash != self.code:
             self.increase_failed_attempts()
             if self.failed_attempts >= 5:
@@ -203,9 +198,6 @@ class PhoneOTP(models.Model):
 
     @classmethod
     def create_and_send_otp(cls, phone_number, purpose='registration'):
-        """
-        ایجاد و ارسال کد تایید (OTP) به شماره موبایل مشخص برای هدف تعیین‌شده.
-        """
         try:
             cls.objects.filter(phone_number=phone_number,
                                is_verified=False, purpose=purpose).delete()
@@ -219,14 +211,12 @@ class PhoneOTP(models.Model):
                 purpose=purpose
             )
 
-            logging.info(
-                f"در حال ارسال کد {raw_code} به شماره {phone_number} برای هدف '{purpose}'.")
-
-            message = f"کد تایید شما: {raw_code}"
+            message = f"کد تأیید شما: {raw_code}"
             success = send_sms(phone_number, message)
 
             if success:
-                logging.info("پیامک با موفقیت ارسال شد.")
+                logging.info(
+                    f"کد {raw_code} با موفقیت به {phone_number} ارسال شد.")
                 return True
             else:
                 logging.warning("ارسال پیامک با شکست مواجه شد.")
@@ -238,20 +228,21 @@ class PhoneOTP(models.Model):
 
 
 class Referral(models.Model):
-    inviter = models.ForeignKey(User, related_name='sent_referrals',
-                                on_delete=models.CASCADE, verbose_name="دعوت‌کننده")
+    inviter = models.ForeignKey(
+        User, related_name='sent_referrals', on_delete=models.CASCADE, verbose_name="دعوت‌کننده"
+    )
     invited = models.OneToOneField(
-        User, related_name='referral', on_delete=models.CASCADE, verbose_name="دعوت‌شده")
+        User, related_name='received_referral', on_delete=models.CASCADE, verbose_name="دعوت‌شده"
+    )
     created_at = models.DateTimeField(
-        auto_now_add=True, verbose_name="تاریخ عضویت")
-    # reward_given = models.BooleanField(default=False, verbose_name="پاداش داده شده؟")
+        auto_now_add=True, verbose_name="تاریخ دعوت")
 
     class Meta:
-        verbose_name = "رفرال"
-        verbose_name_plural = "رفرال‌ها"
+        verbose_name = "دعوت‌نامه"
+        verbose_name_plural = "دعوت‌نامه‌ها"
         ordering = ['-created_at']
 
     def __str__(self):
-        inviter_name = self.inviter.get_full_name() or self.inviter.phone_number
-        invited_name = self.invited.get_full_name() or self.invited.phone_number
-        return f"{inviter_name} → {invited_name}"
+        inviter = self.inviter.get_full_name() or self.inviter.phone_number
+        invited = self.invited.get_full_name() or self.invited.phone_number
+        return f"{inviter} → {invited}"

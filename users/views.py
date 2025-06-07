@@ -1,228 +1,417 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, permissions
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.utils import timezone
 import hashlib
+from rest_framework import generics, permissions
+from users.models import Referral
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
+from .sms_service import send_sms
 
-from .models import PhoneOTP, User, Referral
 from .serializers import (
-    SendOTPSerializer, VerifyOTPSerializer, CompleteProfileSerializer,
-    RequestPhoneChangeSerializer, VerifyPhoneChangeSerializer,
-    ReferralInfoSerializer, SimpleUserSerializer, SetPasswordSerializer
+    PhoneNumberSerializer,
+    OTPVerifySerializer,
+    ProfileCompleteSerializer,
+    LoginPasswordSerializer,
+    SetPasswordSerializer,
+    InvitedUserSerializer, UserProfileSerializer
 )
+from .models import PhoneOTP
+
+User = get_user_model()
 
 
-# توکن JWT برای کاربر
-def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }
+# ارسال OTP به شماره
 
-
-# ساخت یا دریافت کاربر
-def get_or_create_user(phone_number):
-    return User.objects.get_or_create(phone_number=phone_number)
-
-
-# ثبت دعوت اگر کد رفرال وجود داشته باشد
-def create_referral_if_needed(referral_code, new_user):
-    if referral_code:
-        try:
-            inviter = User.objects.get(referral_code=referral_code)
-            if not Referral.objects.filter(invited=new_user).exists():
-                Referral.objects.create(inviter=inviter, invited=new_user)
-        except User.DoesNotExist:
-            pass
-
-    if not new_user.referral_code:
-        new_user.referral_code = new_user.generate_referral_code()
-        new_user.save()
-
-
-# ارسال کد تأیید
 class SendOTPView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        serializer = SendOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        phone_number = request.data.get('phone_number')
+        purpose = request.data.get('purpose', 'registration')
 
-        phone_number = serializer.validated_data["phone_number"]
+        if not phone_number:
+            return Response({"error": "شماره موبایل ارسال نشده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        last_otp = PhoneOTP.objects.filter(
-            phone_number=phone_number).order_by("-created_at").first()
-        if last_otp and (timezone.now() - last_otp.created_at).seconds < 60:
-            return Response(
-                {"detail": "لطفاً کمی صبر کنید و سپس دوباره تلاش کنید."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
+        # حذف OTPهای قبلی برای این شماره و هدف
+        PhoneOTP.objects.filter(phone_number=phone_number,
+                                is_verified=False, purpose=purpose).delete()
 
-        PhoneOTP.create_and_send_otp(phone_number)
-        return Response({"detail": "کد تأیید ارسال شد."}, status=status.HTTP_200_OK)
+        # ایجاد کد جدید
+        raw_code = PhoneOTP.generate_code()
+        hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
+
+        # ذخیره در دیتابیس
+        otp = PhoneOTP.objects.create(
+            phone_number=phone_number,
+            code=hashed_code,
+            purpose=purpose
+        )
+
+        # ارسال پیامک
+        success = send_sms(phone_number, raw_code)
+        if success:
+            return Response({"message": "کد تایید ارسال شد."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": "ارسال پیامک با خطا مواجه شد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# تایید OTP و ورود یا ثبت نام
 
 
-# تأیید کد OTP
-class VerifyOTPView(APIView):
+class VerifyOTPView(generics.GenericAPIView):
+    serializer_class = OTPVerifySerializer
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            print("Validation errors:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        phone_number = serializer.validated_data['phone_number']
-        code = serializer.validated_data['code']
-        referral_code = serializer.validated_data.get('referral_code')
+        phone = serializer.validated_data['phone_number']
+        otp = serializer.validated_data['otp']
+        referral_code = serializer.validated_data.get('referral_code', None)
+        purpose = serializer.validated_data.get(
+            'purpose', None)  # اگر خواستی purpose هم بگیری
+
+        # اگر قصد داری purpose هم بگیری، ابتدا تو Serializer اضافه کن
+
+        # کوئری فیلتر
+        otp_queryset = PhoneOTP.objects.filter(
+            phone_number=phone, is_verified=False)
+        if purpose:
+            otp_queryset = otp_queryset.filter(purpose=purpose)
 
         try:
-            otp_obj = PhoneOTP.objects.get(
-                phone_number=phone_number, code=code, is_verified=False
-            )
+            otp_obj = otp_queryset.latest('created_at')
         except PhoneOTP.DoesNotExist:
-            return Response({"error": "کد تأیید نادرست است."}, status=400)
+            return Response({"detail": "کد تایید معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if otp_obj.is_expired():
-            return Response({"error": "کد منقضی شده است."}, status=400)
+        valid, msg = otp_obj.verify_code(otp)
+        if not valid:
+            return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
 
         otp_obj.is_verified = True
         otp_obj.save()
 
-        user, created = User.objects.get_or_create(phone_number=phone_number)
+        user, created = User.objects.get_or_create(phone_number=phone)
         if created:
-            create_referral_if_needed(referral_code, user)
+            user.is_phone_verified = True
+            user.is_active = True
 
-        tokens = get_tokens_for_user(user)
+            if referral_code:
+                try:
+                    inviter = User.objects.get(referral_code=referral_code)
+                except User.DoesNotExist:
+                    inviter = None
+
+                if inviter:
+                    Referral.objects.create(inviter=inviter, invited=user)
+
+            user.save()
+            profile_complete = False
+        else:
+            profile_complete = all([user.first_name, user.last_name])
+
+        refresh = RefreshToken.for_user(user)
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "profile_complete": profile_complete,
+        }
+
+        return Response(data)
+# ورود با پسورد
+
+
+class LoginWithPasswordView(generics.GenericAPIView):
+    serializer_class = LoginPasswordSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+
+        refresh = RefreshToken.for_user(user)
         return Response({
-            "message": "کد تأیید شد.",
-            "user_created": created,
-            "access": tokens["access"],
-            "refresh": tokens["refresh"],
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
         })
 
 
-# تکمیل پروفایل
-class CompleteProfileView(APIView):
+# تکمیل پروفایل و ست کردن پسورد
+class CompleteProfileView(generics.UpdateAPIView):
+    serializer_class = ProfileCompleteSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+# تغییر پسورد جداگانه (اگر لازم بود)
+class SetPasswordView(generics.GenericAPIView):
+    serializer_class = SetPasswordSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = CompleteProfileSerializer(
-            instance=request.user, data=request.data, partial=True)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response({"detail": "پروفایل با موفقیت تکمیل شد."}, status=status.HTTP_200_OK)
-
-
-# تنظیم رمز عبور
-class SetPasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        serializer = SetPasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        request.user.set_password(serializer.validated_data["password"])
-        request.user.save()
-        return Response({"message": "رمز عبور با موفقیت ذخیره شد."}, status=status.HTTP_200_OK)
-
-
-# درخواست تغییر شماره
-class RequestPhoneChangeView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        serializer = RequestPhoneChangeSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        new_phone = serializer.validated_data["new_phone_number"]
-
-        if new_phone == request.user.phone_number:
-            return Response(
-                {"detail": "شماره جدید نمی‌تواند با شماره فعلی یکسان باشد."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        PhoneOTP.create_and_send_otp(new_phone, purpose="change_phone")
-        return Response({"detail": "کد تأیید برای شماره جدید ارسال شد."}, status=status.HTTP_200_OK)
-
-
-# تأیید تغییر شماره
-class VerifyPhoneChangeView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        serializer = VerifyPhoneChangeSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        new_phone = serializer.validated_data["new_phone_number"]
-        code = serializer.validated_data["code"]
-
-        otp_obj = PhoneOTP.objects.filter(
-            phone_number=new_phone, purpose="change_phone", is_verified=False
-        ).order_by("-created_at").first()
-
-        if not otp_obj:
-            return Response({"detail": "کد تأیید یافت نشد."}, status=400)
-
-        if otp_obj.is_expired():
-            return Response({"detail": "کد تأیید منقضی شده است."}, status=400)
-
-        hashed_code = hashlib.sha256(code.encode()).hexdigest()
-        if otp_obj.code != hashed_code:
-            return Response({"detail": "کد تأیید اشتباه است."}, status=400)
-
+        password = serializer.validated_data['password']
         user = request.user
-        user.phone_number = new_phone
-        user.is_phone_verified = True
+        user.set_password(password)
         user.save()
-
-        otp_obj.is_verified = True
-        otp_obj.save()
-
-        return Response({"detail": "شماره با موفقیت تغییر کرد."}, status=200)
+        return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
 
 
-# لیست ارجاعات من
-class UserReferralStatsView(APIView):
+# خروج (logout)
+class LogoutView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # اگر refresh token رو از کلاینت بفرستیم، می‌تونیم blacklist کنیم
+            refresh_token = request.data.get('refresh')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+        except Exception:
+            pass
+        return Response({"detail": "خروج با موفقیت انجام شد."})
+
+# from rest_framework_simplejwt.tokens import RefreshToken
+# from rest_framework.views import APIView
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.response import Response
+# from rest_framework import status
+
+# class LogoutView(APIView):
+#     permission_classes = (IsAuthenticated,)
+
+#     def post(self, request):
+#         try:
+#             refresh_token = request.data["refresh"]
+#             token = RefreshToken(refresh_token)
+#             token.blacklist()  # اضافه کردن توکن به بلک‌لیست
+#             return Response(status=status.HTTP_205_RESET_CONTENT)
+#         except Exception as e:
+#             return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class ReferralListView(generics.ListAPIView):
+    serializer_class = InvitedUserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        # لیست Referralهایی که این کاربر دعوت کرده
+        return User.objects.filter(received_referral__inviter=user)
+
+
+class TestTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        referrals = Referral.objects.filter(inviter=request.user)
+        user = request.user
         data = {
-            "total_referrals": referrals.count(),
-            "referrals": ReferralInfoSerializer(referrals, many=True).data
+            "message": "توکن معتبر است.",
+            "user_phone": user.phone_number,
+            "user_id": str(user.id),
+            "user_full_name": user.get_full_name(),
         }
-        return Response(data, status=200)
+        return Response(data)
 
 
-# ساختار درختی ارجاعات (مدیر → راننده → دانش‌آموز)
-class ReferralTreeView(APIView):
-    permission_classes = [IsAuthenticated]
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get_object(self):
+        # فقط کاربر جاری پروفایل خودش را می‌بیند و ویرایش می‌کند
+        return self.request.user
+
+
+class TestTokenView(APIView):
     def get(self, request):
-        manager = request.user
+        return Response({"message": "Test token view works!"})
 
-        if manager.role != 'school_manager':
-            return Response({"detail": "دسترسی فقط برای مدیران مدرسه مجاز است."}, status=403)
+# import re
+# import hashlib
+# from rest_framework import serializers
+# from django.contrib.auth import get_user_model
+# from .models import PhoneOTP, Referral
 
-        tree = []
+# User = get_user_model()
 
-        driver_referrals = Referral.objects.filter(
-            inviter=manager, invited__role='taxi_driver'
-        ).select_related('invited')
 
-        for driver_ref in driver_referrals:
-            driver = driver_ref.invited
-            student_referrals = Referral.objects.filter(
-                inviter=driver, invited__role='student'
-            ).select_related('invited')
+# # ───── Validations ─────
+# def validate_iran_phone_number(value):
+#     if not re.match(r'^09\d{9}$', value):
+#         raise serializers.ValidationError("شماره موبایل معتبر نیست.")
+#     return value
 
-            students = [SimpleUserSerializer(
-                ref.invited).data for ref in student_referrals]
 
-            tree.append({
-                "driver": SimpleUserSerializer(driver).data,
-                "students": students
-            })
+# def validate_national_code(value):
+#     if not re.match(r'^\d{10}$', value):
+#         raise serializers.ValidationError("کد ملی معتبر نیست.")
+#     return value
 
-        return Response({
-            "manager": SimpleUserSerializer(manager).data,
-            "referral_tree": tree
-        }, status=200)
+
+# # ───── OTP Serializers ─────
+# class SendOTPSerializer(serializers.Serializer):
+#     phone_number = serializers.CharField(
+#         validators=[validate_iran_phone_number])
+
+
+# class VerifyOTPSerializer(serializers.Serializer):
+#     phone_number = serializers.CharField(
+#         validators=[validate_iran_phone_number])
+#     code = serializers.CharField(max_length=4)
+#     referral_code = serializers.CharField(required=False, allow_blank=True)
+
+#     def validate(self, attrs):
+#         phone, code = attrs["phone_number"], attrs["code"]
+
+#         try:
+#             otp = PhoneOTP.objects.filter(
+#                 phone_number=phone,
+#                 purpose='registration',
+#                 is_verified=False
+#             ).latest("created_at")
+#         except PhoneOTP.DoesNotExist:
+#             raise serializers.ValidationError(
+#                 {"code": "کد تأیید پیدا نشد. لطفاً مجدداً درخواست دهید."})
+
+#         if otp.is_expired():
+#             raise serializers.ValidationError({"code": "کد منقضی شده است."})
+
+#         input_hash = hashlib.sha256(code.encode()).hexdigest()
+#         if otp.code != input_hash:
+#             otp.increase_failed_attempts()
+#             if otp.failed_attempts >= 5:
+#                 raise serializers.ValidationError(
+#                     {"code": "تعداد تلاش‌های ناموفق بیش از حد مجاز است."})
+#             raise serializers.ValidationError({"code": "کد تأیید اشتباه است."})
+
+#         otp.is_verified = True
+#         otp.save(update_fields=["is_verified"])
+#         return attrs
+
+
+# # ───── Profile Serializers ─────
+# class CompleteProfileSerializer(serializers.ModelSerializer):
+#     full_name = serializers.CharField(required=True)
+#     national_code = serializers.CharField(
+#         required=True, validators=[validate_national_code])
+#     email = serializers.EmailField(required=False, allow_blank=True)
+
+#     class Meta:
+#         model = User
+#         fields = ['full_name', 'national_code', 'email']
+
+#     def update(self, instance, validated_data):
+#         for attr, val in validated_data.items():
+#             setattr(instance, attr, val)
+#         instance.save()
+#         return instance
+
+
+# class UserUpdateSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = ['first_name', 'last_name']
+
+
+# class UserProfileSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = ['id', 'phone_number', 'first_name',
+#                   'last_name', 'referral_code', 'date_joined']
+
+
+# class SimpleUserSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = ['user_uuid', 'first_name',
+#                   'last_name', 'phone_number', 'role']
+
+
+# # ───── Phone Change Serializers ─────
+# class RequestPhoneChangeSerializer(serializers.Serializer):
+#     new_phone_number = serializers.CharField(
+#         validators=[validate_iran_phone_number])
+
+#     def validate_new_phone_number(self, value):
+#         if User.objects.filter(phone_number=value).exists():
+#             raise serializers.ValidationError(
+#                 "این شماره تلفن قبلاً ثبت شده است.")
+#         return value
+
+
+# class VerifyPhoneChangeSerializer(serializers.Serializer):
+#     new_phone_number = serializers.CharField(
+#         validators=[validate_iran_phone_number])
+#     code = serializers.CharField(max_length=6)
+
+#     def validate(self, data):
+#         phone, code = data["new_phone_number"], data["code"]
+
+#         try:
+#             otp_entry = PhoneOTP.objects.filter(
+#                 phone_number=phone, purpose='change_phone', is_verified=False
+#             ).latest('created_at')
+#         except PhoneOTP.DoesNotExist:
+#             raise serializers.ValidationError(
+#                 {"code": "کد ارسال نشده یا نامعتبر است."})
+
+#         if otp_entry.is_expired():
+#             raise serializers.ValidationError(
+#                 {"code": "کد تأیید منقضی شده است."})
+
+#         hashed_code = hashlib.sha256(code.encode()).hexdigest()
+#         if otp_entry.code != hashed_code:
+#             raise serializers.ValidationError({"code": "کد تأیید اشتباه است."})
+
+#         return data
+
+
+# # ───── Password Serializers ─────
+# class SetPasswordSerializer(serializers.Serializer):
+#     password = serializers.CharField(write_only=True, min_length=6)
+
+#     def validate_password(self, value):
+#         if ' ' in value:
+#             raise serializers.ValidationError(
+#                 "رمز عبور نباید شامل فاصله باشد.")
+#         return value
+
+
+# class ChangePasswordSerializer(serializers.Serializer):
+#     old_password = serializers.CharField()
+#     new_password = serializers.CharField(min_length=6)
+
+#     def validate_old_password(self, value):
+#         user = self.context['request'].user
+#         if not user.check_password(value):
+#             raise serializers.ValidationError("رمز عبور فعلی نادرست است.")
+#         return value
+
+
+# # ───── Referral Serializers ─────
+# class ReferralInfoSerializer(serializers.ModelSerializer):
+#     invited_full_name = serializers.SerializerMethodField()
+#     invited_registered_at = serializers.DateTimeField(
+#         source='invited.date_joined')
+
+#     class Meta:
+#         model = Referral
+#         fields = ['invited_full_name', 'invited_registered_at']
+
+#     def get_invited_full_name(self, obj):
+#         return f"{obj.invited.first_name or ''} {obj.invited.last_name or ''}".strip()
+
+
+# class UserReferralStatsSerializer(serializers.Serializer):
+#     total_referrals = serializers.IntegerField()
+#     referrals = ReferralInfoSerializer(many=True)
