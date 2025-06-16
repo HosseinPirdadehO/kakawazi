@@ -3057,3 +3057,4 @@ RuntimeError: You called this URL via PUT, but the URL doesn't end in a slash an
 [2025-06-16 17:30:39,732] INFO django.utils.autoreload Watching for file changes with StatReloader
 [2025-06-16 17:30:40,856] INFO django.utils.autoreload /Users/mr.pirdadeh/Desktop/-ــ-/users/views.py changed, reloading.
 [2025-06-16 17:30:41,060] INFO django.utils.autoreload Watching for file changes with StatReloader
+[2025-06-16 19:29:56,460] INFO django.utils.autoreload Watching for file changes with StatReloader

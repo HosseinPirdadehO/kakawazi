@@ -366,13 +366,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # }
 
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ['root'],
-        'USER': os.environ['DB_USER'],
-        'PASSWORD': os.environ['0M6PjsjhUXFh9oM6Gcv28xC5'],
-        'HOST': os.environ['taxi-db'],
-        'PORT': os.environ['5432'],
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.environ['root'],
+#         'USER': os.environ['DB_USER'],
+#         'PASSWORD': os.environ['0M6PjsjhUXFh9oM6Gcv28xC5'],
+#         'HOST': os.environ['taxi-db'],
+#         'PORT': os.environ['5432'],
+#     }
+# }
