@@ -1,4 +1,6 @@
 {
+  "platform": "python",
+  "app": "taxi",
   "django": {
     "settingsFile": "taxi/settings.py"
   }

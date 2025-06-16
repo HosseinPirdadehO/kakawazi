@@ -192,7 +192,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 # ALLOWED_HOSTS = ['api.tda24.ir']
-
+ALLOWED_HOSTS = ['*']
 # ========================
 # Installed apps & Middleware
 # ========================
