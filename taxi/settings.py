@@ -317,8 +317,8 @@ SIMPLE_JWT = {
 # Logging
 # ========================
 
-LOG_DIR = os.getenv('DJANGO_LOG_DIR', os.path.join(BASE_DIR, 'logs'))
-os.makedirs(LOG_DIR, exist_ok=True)
+# LOG_DIR = os.getenv('DJANGO_LOG_DIR', os.path.join(BASE_DIR, 'logs'))
+# os.makedirs(LOG_DIR, exist_ok=True)
 
 LOGGING = {
     'version': 1,
