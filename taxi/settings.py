@@ -365,14 +365,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #     # تنظیمات دیگر ...
 # }
 
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'HOST': 'taxi-db',
-        'PORT': '5432',
-        'NAME': 'api-tda241',
+        'NAME': 'postgres',
         'USER': 'root',
         'PASSWORD': '0M6PjsjhUXFh9oM6Gcv28xC5',
+        'HOST': 'taxi-db',
+        'PORT': '5432',
     }
 }
