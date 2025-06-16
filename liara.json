@@ -1,6 +1,6 @@
 {
   "platform": "python",
-  "app": "taxi",
+  "app": "api-tda241",
   "django": {
     "settingsFile": "taxi/settings.py"
   }
