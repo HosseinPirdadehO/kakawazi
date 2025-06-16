@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/token/blacklist/', TokenBlacklistView.as_view(),
          name='token_blacklist'),
 ]
+
 #
 # git add .
 # git commit -m 'june4'

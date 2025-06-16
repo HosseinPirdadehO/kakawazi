@@ -287,8 +287,7 @@ USE_TZ = True
 # ========================
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.getenv('DJANGO_STATIC_ROOT',
-                        os.path.join(BASE_DIR, 'staticfiles'))
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.getenv('DJANGO_MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
@@ -365,3 +364,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #     'AUTH_HEADER_TYPES': ('Bearer',),
 #     # تنظیمات دیگر ...
 # }
+
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ['root'],
+        'USER': os.environ['taxi-db'],
+        'PASSWORD': os.environ['0M6PjsjhUXFh9oM6Gcv28xC5'],
+        'HOST': os.environ['taxi-db'],
+        'PORT': os.environ['5432'],
+    }
+}
