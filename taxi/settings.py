@@ -371,7 +371,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'HOST': 'taxi-db',
         'PORT': '5432',
-        'NAME': 'taxi-db',
+        'NAME': 'taxi',
         'USER': 'root',
         'PASSWORD': '0M6PjsjhUXFh9oM6Gcv28xC5',
     }
