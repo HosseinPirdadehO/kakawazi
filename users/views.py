@@ -1,29 +1,39 @@
+# -*- coding: utf-8 -*-
 import hashlib
-from rest_framework import generics, permissions
-from users.models import Referral
-from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import get_user_model
+from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
-from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
-from .sms_service import send_sms
 
+from users.models import Referral
+from .models import PhoneOTP
+from .sms_service import send_sms
 from .serializers import (
     PhoneNumberSerializer,
     OTPVerifySerializer,
     ProfileCompleteSerializer,
     LoginPasswordSerializer,
     SetPasswordSerializer,
-    InvitedUserSerializer, UserProfileSerializer
+    InvitedUserSerializer,
+    UserProfileSerializer
 )
-from .models import PhoneOTP
 
 User = get_user_model()
 
 
-# ارسال OTP به شماره
+# --------------------------------------------
+#  نمایش لیست تمام کاربران ثبت‌نام‌شده
+# --------------------------------------------
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]  # یا IsAdminUser
+# -----------------------------------------------
+#  ارسال کد تایید (OTP) به شماره موبایل کاربر
+# -----------------------------------------------
+
 
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -35,28 +45,33 @@ class SendOTPView(APIView):
         if not phone_number:
             return Response({"error": "شماره موبایل ارسال نشده است."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # حذف OTPهای قبلی برای این شماره و هدف
+        # بررسی احراز هویت در حالت تغییر شماره
+        if purpose == "change_phone":
+            if not request.user or not request.user.is_authenticated:
+                return Response({"error": "برای تغییر شماره، ابتدا وارد شوید."}, status=status.HTTP_403_FORBIDDEN)
+
+            # بررسی اینکه شماره جدید قبلاً توسط کاربر دیگری استفاده نشده باشد
+            if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
+                return Response({"error": "این شماره قبلاً ثبت شده است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # حذف OTPهای قبلی ارسال نشده
         PhoneOTP.objects.filter(phone_number=phone_number,
                                 is_verified=False, purpose=purpose).delete()
 
-        # ایجاد کد جدید
         raw_code = PhoneOTP.generate_code()
         hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
 
-        # ذخیره در دیتابیس
-        otp = PhoneOTP.objects.create(
-            phone_number=phone_number,
-            code=hashed_code,
-            purpose=purpose
-        )
+        PhoneOTP.objects.create(phone_number=phone_number,
+                                code=hashed_code, purpose=purpose)
 
-        # ارسال پیامک
         success = send_sms(phone_number, raw_code)
         if success:
             return Response({"message": "کد تایید ارسال شد."}, status=status.HTTP_200_OK)
-        else:
-            return Response({"error": "ارسال پیامک با خطا مواجه شد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# تایید OTP و ورود یا ثبت نام
+        return Response({"error": "ارسال پیامک با خطا مواجه شد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ------------------------------------------------------
+#  تایید کد OTP و ورود یا ثبت‌نام کاربر جدید (JWT)
+# ------------------------------------------------------
 
 
 class VerifyOTPView(generics.GenericAPIView):
@@ -65,21 +80,18 @@ class VerifyOTPView(generics.GenericAPIView):
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            print("Validation errors:", serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
 
         phone = serializer.validated_data['phone_number']
         otp = serializer.validated_data['otp']
-        referral_code = serializer.validated_data.get('referral_code', None)
-        purpose = serializer.validated_data.get(
-            'purpose', None)  # اگر خواستی purpose هم بگیری
+        referral_code = serializer.validated_data.get('referral_code')
+        purpose = serializer.validated_data.get('purpose', 'registration')
 
-        # اگر قصد داری purpose هم بگیری، ابتدا تو Serializer اضافه کن
-
-        # کوئری فیلتر
+        # گرفتن OTP مربوط به این شماره و منظور (purpose)
         otp_queryset = PhoneOTP.objects.filter(
-            phone_number=phone, is_verified=False)
+            phone_number=phone,
+            is_verified=False
+        )
         if purpose:
             otp_queryset = otp_queryset.filter(purpose=purpose)
 
@@ -88,41 +100,56 @@ class VerifyOTPView(generics.GenericAPIView):
         except PhoneOTP.DoesNotExist:
             return Response({"detail": "کد تایید معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # بررسی اعتبار کد OTP
         valid, msg = otp_obj.verify_code(otp)
         if not valid:
             return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
 
+        #  علامت‌گذاری OTP به عنوان تأییدشده
         otp_obj.is_verified = True
         otp_obj.save()
 
+        # -----------------------------------------
+        #  حالت تغییر شماره موبایل (change_phone)
+        # -----------------------------------------
+        if purpose == "change_phone":
+            if not request.user.is_authenticated:
+                return Response({"detail": "برای تغییر شماره، ابتدا وارد شوید."}, status=status.HTTP_403_FORBIDDEN)
+
+            if User.objects.filter(phone_number=phone).exclude(id=request.user.id).exists():
+                return Response({"detail": "این شماره قبلاً توسط کاربر دیگری استفاده شده است."}, status=status.HTTP_400_BAD_REQUEST)
+
+            request.user.phone_number = phone
+            request.user.save()
+            return Response({"detail": "شماره تلفن با موفقیت تغییر یافت."}, status=status.HTTP_200_OK)
+
+        # -----------------------------------------
+        #  حالت ثبت‌نام یا ورود (registration/login)
+        # -----------------------------------------
         user, created = User.objects.get_or_create(phone_number=phone)
+
         if created:
             user.is_phone_verified = True
             user.is_active = True
-
             if referral_code:
-                try:
-                    inviter = User.objects.get(referral_code=referral_code)
-                except User.DoesNotExist:
-                    inviter = None
-
+                inviter = User.objects.filter(
+                    referral_code=referral_code).first()
                 if inviter:
                     Referral.objects.create(inviter=inviter, invited=user)
-
             user.save()
-            profile_complete = False
-        else:
-            profile_complete = all([user.first_name, user.last_name])
+
+        profile_complete = all([user.first_name, user.last_name])
 
         refresh = RefreshToken.for_user(user)
-        data = {
+        return Response({
             "refresh": str(refresh),
             "access": str(refresh.access_token),
             "profile_complete": profile_complete,
-        }
+        })
 
-        return Response(data)
-# ورود با پسورد
+# --------------------------------------------
+#  ورود با رمز عبور (در صورت تنظیم قبلی)
+# --------------------------------------------
 
 
 class LoginWithPasswordView(generics.GenericAPIView):
@@ -141,16 +168,24 @@ class LoginWithPasswordView(generics.GenericAPIView):
         })
 
 
-# تکمیل پروفایل و ست کردن پسورد
-class CompleteProfileView(generics.UpdateAPIView):
+# ------------------------------------------------------
+#  تکمیل یا بروزرسانی اطلاعات پروفایل کاربر جاری
+# ------------------------------------------------------
+class CompleteProfileView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ProfileCompleteSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user
 
+    def delete(self, request, *args, **kwargs):
+        self.get_object().delete()
+        return Response({"detail": "پروفایل کاربری با موفقیت حذف شد."}, status=status.HTTP_204_NO_CONTENT)
 
-# تغییر پسورد جداگانه (اگر لازم بود)
+
+# -------------------------------------
+#  تنظیم یا تغییر رمز عبور کاربر
+# -------------------------------------
 class SetPasswordView(generics.GenericAPIView):
     serializer_class = SetPasswordSerializer
     permission_classes = [IsAuthenticated]
@@ -158,21 +193,22 @@ class SetPasswordView(generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        password = serializer.validated_data['password']
-        user = request.user
-        user.set_password(password)
-        user.save()
+
+        request.user.set_password(serializer.validated_data['password'])
+        request.user.save()
+
         return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
 
 
-# خروج (logout)
+# -----------------------------------
+#  خروج کاربر و بلاک کردن توکن JWT
+# -----------------------------------
 class LogoutView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
-            # اگر refresh token رو از کلاینت بفرستیم، می‌تونیم blacklist کنیم
-            refresh_token = request.data.get('refresh')
+            refresh_token = request.data.get("refresh")
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
@@ -180,61 +216,44 @@ class LogoutView(generics.GenericAPIView):
             pass
         return Response({"detail": "خروج با موفقیت انجام شد."})
 
-# from rest_framework_simplejwt.tokens import RefreshToken
-# from rest_framework.views import APIView
-# from rest_framework.permissions import IsAuthenticated
-# from rest_framework.response import Response
-# from rest_framework import status
 
-# class LogoutView(APIView):
-#     permission_classes = (IsAuthenticated,)
-
-#     def post(self, request):
-#         try:
-#             refresh_token = request.data["refresh"]
-#             token = RefreshToken(refresh_token)
-#             token.blacklist()  # اضافه کردن توکن به بلک‌لیست
-#             return Response(status=status.HTTP_205_RESET_CONTENT)
-#         except Exception as e:
-#             return Response(status=status.HTTP_400_BAD_REQUEST)
-
-
+# ------------------------------------------------
+#  نمایش لیست کاربران دعوت‌شده توسط کاربر جاری
+# ------------------------------------------------
 class ReferralListView(generics.ListAPIView):
     serializer_class = InvitedUserSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        # لیست Referralهایی که این کاربر دعوت کرده
-        return User.objects.filter(received_referral__inviter=user)
+        return User.objects.filter(received_referral__inviter=self.request.user)
 
 
+# --------------------------------------------------
+#  مشاهده یا ویرایش اطلاعات پروفایل کاربر جاری
+# --------------------------------------------------
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+# ------------------------------------------------
+#  بررسی اعتبار توکن و اطلاعات کاربر از توکن JWT
+# ------------------------------------------------
 class TestTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        data = {
+        return Response({
             "message": "توکن معتبر است.",
             "user_phone": user.phone_number,
             "user_id": str(user.id),
             "user_full_name": user.get_full_name(),
-        }
-        return Response(data)
+        })
 
-
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_object(self):
-        # فقط کاربر جاری پروفایل خودش را می‌بیند و ویرایش می‌کند
-        return self.request.user
-
-
-class TestTokenView(APIView):
-    def get(self, request):
-        return Response({"message": "Test token view works!"})
 
 # import re
 # import hashlib

@@ -10,15 +10,14 @@ from .views import (
     LoginWithPasswordView,
     CompleteProfileView,
     SetPasswordView,
-    LogoutView, TestTokenView, ReferralListView, UserProfileView
+    LogoutView, TestTokenView, ReferralListView, UserProfileView, UserListView
 )
 
 urlpatterns = [
     path('send-otp/', SendOTPView.as_view(), name='send-otp'),
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     path('login-password/', LoginWithPasswordView.as_view(), name='login-password'),
-    path('complete-profile/', CompleteProfileView.as_view(),
-         name='complete-profile'),
+    path('profile/', CompleteProfileView.as_view(), name='user-profile'),
     path('set-password/', SetPasswordView.as_view(), name='set-password'),
     path('logout/', LogoutView.as_view(), name='logout'),
 
@@ -26,6 +25,7 @@ urlpatterns = [
     path('test-token/', TestTokenView.as_view(), name='test-token'),
 
     path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('list-users/', UserListView.as_view(), name='user-list'),
 
 
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
