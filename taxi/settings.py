@@ -367,10 +367,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'myprojectdb',
+        'NAME': 'root',
         'USER': 'myprojectdb',
-        'PASSWORD': 'HH1907hh',
-        'HOST': 'localhost',
+        'PASSWORD': 'Br0QJj8bsxWgosWkR2UUNn6Y',
+        'HOST': 'myprojectdb',
         'PORT': '5432',
     }
 }
