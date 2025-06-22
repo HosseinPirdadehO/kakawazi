@@ -191,8 +191,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
                        'django-insecure-default-key-for-dev-only')
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = ['api.tda24.ir']
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['api.tda24.ir', 'localhost', '127.0.0.1', 'localhost:3000']
 # ========================
 # Installed apps & Middleware
 # ========================
