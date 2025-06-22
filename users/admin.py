@@ -1,79 +1,107 @@
-# from django.contrib import admin
-# from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-# from django.utils.translation import gettext_lazy as _
-# from .models import User, PhoneOTP, Referral
-# from django.contrib import admin
-# from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from .models import User, PhoneOTP, Referral
 
 
-# @admin.register(User)
-# class UserAdmin(BaseUserAdmin):
-#     ordering = ['phone_number']
-#     list_display = (
-#         'phone_number', 'get_full_name', 'role', 'type_of_car', 'plate_number',
-#         'is_phone_verified', 'is_active', 'is_staff', 'date_joined', 'status'
-#     )
-#     list_filter = ('is_staff', 'is_active', 'status', 'role', 'type_of_car')
-#     search_fields = (
-#         'phone_number', 'first_name', 'last_name', 'email',
-#         'referral_code', 'national_code', 'plate_number'
-#     )
-#     readonly_fields = ('date_joined', 'last_login',
-#                        'user_id', 'referral_code')
-
-#     fieldsets = (
-#         (None, {'fields': ('phone_number', 'password')}),
-#         (_('Personal info'), {
-#             'fields': (
-#                 'first_name', 'last_name', 'email', 'birth_date',
-#                 'city', 'state', 'national_code', 'image',
-#                 'role', 'type_of_car', 'plate_number'
-#             )
-#         }),
-#         (_('Permissions'), {'fields': ('is_active', 'is_staff',
-#          'is_superuser', 'groups', 'user_permissions')}),
-#         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
-#         (_('Additional info'), {
-#             'fields': ('status', 'is_phone_verified', 'referral_code', 'user_id')
-#         }),
-#     )
-
-#     add_fieldsets = (
-#         (None, {
-#             'classes': ('wide',),
-#             'fields': ('phone_number', 'password1', 'password2', 'role', 'type_of_car', 'plate_number'),
-#         }),
-#     )
-
-#     def get_full_name(self, obj):
-#         return obj.get_full_name()
-#     get_full_name.short_description = 'نام کامل'
+# =================== Inline ===================
+class ReferralInline(admin.TabularInline):
+    model = Referral
+    fk_name = 'inviter'
+    extra = 0
+    readonly_fields = ('invited', 'created_at')
+    verbose_name = "کاربر دعوت‌شده"
+    verbose_name_plural = "کاربران دعوت‌شده"
 
 
-# @admin.register(PhoneOTP)
-# class PhoneOTPAdmin(admin.ModelAdmin):
-#     list_display = ('phone_number', 'code', 'purpose',
-#                     'is_verified', 'created_at', 'is_expired')
-#     list_filter = ('purpose', 'is_verified', 'created_at')
-#     search_fields = ('phone_number', 'code')
-#     readonly_fields = ('created_at',)
+# =================== UserAdmin ===================
+@admin.register(User)
+class UserAdmin(BaseUserAdmin):
+    inlines = [ReferralInline]
 
-#     def is_expired(self, obj):
-#         return obj.is_expired()
-#     is_expired.boolean = True
-#     is_expired.short_description = 'منقضی شده؟'
+    fieldsets = (
+        ("اطلاعات ورود", {
+            'fields': ('phone_number', 'password', 'is_phone_verified')
+        }),
+        ("اطلاعات شخصی", {
+            'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image')
+        }),
+        ("موقعیت جغرافیایی", {
+            'fields': ('state', 'city')
+        }),
+        ("اطلاعات ماشین", {
+            'fields': ('plate_number', 'type_of_car')
+        }),
+        ("نقش و وضعیت", {
+            'fields': ('role', 'status', 'is_active', 'is_staff', 'is_superuser')
+        }),
+        ("سیستم ارجاع", {
+            'fields': ('referral_code', 'referral')
+        }),
+        ("زمان‌ها", {
+            'fields': ('created_at', 'date_joined', 'last_login')
+        }),
+    )
+
+    add_fieldsets = (
+        ("ساخت کاربر جدید", {
+            'classes': ('wide',),
+            'fields': ('phone_number', 'password1', 'password2', 'is_staff', 'is_superuser'),
+        }),
+    )
+
+    list_display = (
+        'phone_number', 'get_full_name', 'role', 'status',
+        'is_active', 'is_phone_verified', 'referral_link', 'referral_count'
+    )
+    list_filter = ('is_active', 'is_phone_verified',
+                   'status', 'role', 'created_at', 'is_staff')
+    search_fields = ('phone_number', 'first_name',
+                     'last_name', 'email', 'referral_code')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'date_joined',
+                       'last_login', 'referral_code')
+
+    def get_full_name(self, obj):
+        return obj.get_full_name() or "—"
+    get_full_name.short_description = 'نام کامل'
+
+    def referral_link(self, obj):
+        if obj.referral:
+            return f"{obj.referral.get_full_name() or obj.referral.phone_number}"
+        return "-"
+    referral_link.short_description = "دعوت‌کننده"
+
+    def referral_count(self, obj):
+        return obj.referrals.count()
+    referral_count.short_description = "تعداد ارجاعات"
 
 
-# @admin.register(Referral)
-# class ReferralAdmin(admin.ModelAdmin):
-#     list_display = ('inviter', 'invited', 'created_at')
-#     list_filter = ('created_at', 'invited')
-#     search_fields = (
-#         'inviter__phone_number',
-#         'inviter__first_name',
-#         'inviter__last_name',
-#         'invited__phone_number',
-#         'invited__first_name',
-#         'invited__last_name',
-#     )
-#     readonly_fields = ('created_at',)
+@admin.register(PhoneOTP)
+class PhoneOTPAdmin(admin.ModelAdmin):
+    list_display = (
+        'phone_number', 'purpose', 'created_at', 'is_verified', 'failed_attempts', 'is_expired_display'
+    )
+    list_filter = ('purpose', 'is_verified', 'created_at')
+    search_fields = ('phone_number',)
+    readonly_fields = ('code', 'created_at')
+
+    def is_expired_display(self, obj):
+        return obj.is_expired()
+    is_expired_display.boolean = True
+    is_expired_display.short_description = "منقضی؟"
+
+
+@admin.register(Referral)
+class ReferralAdmin(admin.ModelAdmin):
+    list_display = ('inviter_name', 'invited_name', 'created_at')
+    search_fields = ('inviter__phone_number', 'invited__phone_number')
+    list_filter = ('created_at',)
+    readonly_fields = ('inviter', 'invited', 'created_at')
+
+    def inviter_name(self, obj):
+        return obj.inviter.get_full_name() or obj.inviter.phone_number
+    inviter_name.short_description = "دعوت‌کننده"
+
+    def invited_name(self, obj):
+        return obj.invited.get_full_name() or obj.invited.phone_number
+    invited_name.short_description = "دعوت‌شده"

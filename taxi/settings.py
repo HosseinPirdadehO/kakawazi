@@ -191,7 +191,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
                        'django-insecure-default-key-for-dev-only')
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = ['api.tda24.ir', 'localhost', '127.0.0.1', 'localhost:3000']
+ALLOWED_HOSTS = ['api.tda24.ir', 'localhost', '127.0.0.1',]
 # ========================
 # Installed apps & Middleware
 # ========================
@@ -364,13 +364,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #     # تنظیمات دیگر ...
 # }
 
-DATABASES = {
+DATDATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'root',
-        'USER': 'myprojectdb',
-        'PASSWORD': 'Br0QJj8bsxWgosWkR2UUNn6Y',
-        'HOST': 'myprojectdb',
+        'NAME': 'postgres',          # نام دیتابیس
+        'USER': 'root',              # یوزرنیم دیتابیس
+        'PASSWORD': 'sQ2vm8nDSXjIxb0Hs16K9VX2',  # رمز دیتابیس
+        'HOST': 'localhost',           # هاست دیتابیس
         'PORT': '5432',
     }
 }
