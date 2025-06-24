@@ -24,7 +24,7 @@ urlpatterns = [
     path('referrals/', ReferralListView.as_view(), name='referral-list'),
     path('test-token/', TestTokenView.as_view(), name='test-token'),
 
-    path('profile/', UserProfileView.as_view(), name='user-profile'),
+    path('profile-users/', UserProfileView.as_view(), name='user-profile'),
     path('list-users/', UserListView.as_view(), name='user-list'),
 
 

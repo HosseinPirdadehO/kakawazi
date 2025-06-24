@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 import hashlib
+import hashlib
 from django.contrib.auth import get_user_model
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-
+from .mixins import StandardResponseMixin
 from users.models import Referral
 from .models import PhoneOTP
 from .sms_service import send_sms
@@ -19,23 +20,32 @@ from .serializers import (
     InvitedUserSerializer,
     UserProfileSerializer
 )
-
+from .mixins import StandardResponseMixin
 User = get_user_model()
 
 
 # --------------------------------------------
-#  نمایش لیست تمام کاربران ثبت‌نام‌شده
+# نمایش لیست کاربران
 # --------------------------------------------
-class UserListView(generics.ListAPIView):
+class UserListView(StandardResponseMixin, generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsAuthenticated]  # یا IsAdminUser
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            return self.success_response(message="لیست کاربران دریافت شد.", data=serializer.data)
+        except Exception as e:
+            return self.error_response(message=f"خطا در دریافت لیست کاربران: {str(e)}")
+
 # -----------------------------------------------
 #  ارسال کد تایید (OTP) به شماره موبایل کاربر
 # -----------------------------------------------
 
 
-class SendOTPView(APIView):
+class SendOTPView(StandardResponseMixin, APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -43,31 +53,32 @@ class SendOTPView(APIView):
         purpose = request.data.get('purpose', 'registration')
 
         if not phone_number:
-            return Response({"error": "شماره موبایل ارسال نشده است."}, status=status.HTTP_400_BAD_REQUEST)
+            return self.error_response(message="شماره موبایل ارسال نشده است.", status_code=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی احراز هویت در حالت تغییر شماره
         if purpose == "change_phone":
             if not request.user or not request.user.is_authenticated:
-                return Response({"error": "برای تغییر شماره، ابتدا وارد شوید."}, status=status.HTTP_403_FORBIDDEN)
+                return self.error_response(message="برای تغییر شماره، ابتدا وارد شوید.", status_code=status.HTTP_403_FORBIDDEN)
 
-            # بررسی اینکه شماره جدید قبلاً توسط کاربر دیگری استفاده نشده باشد
             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
-                return Response({"error": "این شماره قبلاً ثبت شده است."}, status=status.HTTP_400_BAD_REQUEST)
+                return self.error_response(message="این شماره قبلاً ثبت شده است.", status_code=status.HTTP_400_BAD_REQUEST)
 
-        # حذف OTPهای قبلی ارسال نشده
-        PhoneOTP.objects.filter(phone_number=phone_number,
-                                is_verified=False, purpose=purpose).delete()
+        try:
+            PhoneOTP.objects.filter(
+                phone_number=phone_number, is_verified=False, purpose=purpose).delete()
 
-        raw_code = PhoneOTP.generate_code()
-        hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
+            raw_code = PhoneOTP.generate_code()
+            hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
 
-        PhoneOTP.objects.create(phone_number=phone_number,
-                                code=hashed_code, purpose=purpose)
+            PhoneOTP.objects.create(
+                phone_number=phone_number, code=hashed_code, purpose=purpose)
 
-        success = send_sms(phone_number, raw_code)
-        if success:
-            return Response({"message": "کد تایید ارسال شد."}, status=status.HTTP_200_OK)
-        return Response({"error": "ارسال پیامک با خطا مواجه شد."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            success = send_sms(phone_number, raw_code)
+            if success:
+                return self.success_response(message="کد تایید ارسال شد.")
+            else:
+                return self.error_response(message="ارسال پیامک با خطا مواجه شد.", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
 
 # ------------------------------------------------------
 #  تایید کد OTP و ورود یا ثبت‌نام کاربر جدید (JWT)
@@ -152,57 +163,91 @@ class VerifyOTPView(generics.GenericAPIView):
 # --------------------------------------------
 
 
-class LoginWithPasswordView(generics.GenericAPIView):
+class LoginWithPasswordView(StandardResponseMixin, generics.GenericAPIView):
     serializer_class = LoginPasswordSerializer
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
+        if not serializer.is_valid():
+            return self.error_response(message="اطلاعات ورود نامعتبر است.", data=serializer.errors)
 
+        user = serializer.validated_data['user']
         refresh = RefreshToken.for_user(user)
-        return Response({
+        return self.success_response(message="ورود با رمز عبور موفقیت‌آمیز بود.", data={
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         })
 
-
 # ------------------------------------------------------
 #  تکمیل یا بروزرسانی اطلاعات پروفایل کاربر جاری
 # ------------------------------------------------------
-class CompleteProfileView(generics.RetrieveUpdateDestroyAPIView):
+
+
+class CompleteProfileView(StandardResponseMixin, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ProfileCompleteSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user
 
-    def delete(self, request, *args, **kwargs):
-        self.get_object().delete()
-        return Response({"detail": "پروفایل کاربری با موفقیت حذف شد."}, status=status.HTTP_204_NO_CONTENT)
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return self.success_response(message="اطلاعات پروفایل با موفقیت دریافت شد.", data=serializer.data)
+        except Exception as e:
+            return self.error_response(message=f"خطا در دریافت اطلاعات پروفایل: {str(e)}")
 
+    def update(self, request, *args, **kwargs):
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(
+                instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            return self.success_response(message="پروفایل با موفقیت به‌روزرسانی شد.", data=serializer.data)
+        except Exception as e:
+            return self.error_response(message=f"خطا در به‌روزرسانی پروفایل: {str(e)}")
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        try:
+            self.get_object().delete()
+            return self.success_response(message="پروفایل کاربری با موفقیت حذف شد.")
+        except Exception as e:
+            return self.error_response(message=f"خطا در حذف پروفایل: {str(e)}")
 
 # -------------------------------------
 #  تنظیم یا تغییر رمز عبور کاربر
 # -------------------------------------
-class SetPasswordView(generics.GenericAPIView):
+
+
+class SetPasswordView(StandardResponseMixin, generics.GenericAPIView):
     serializer_class = SetPasswordSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return self.error_response(message="داده‌های ارسالی نامعتبر است.", data=serializer.errors)
 
-        request.user.set_password(serializer.validated_data['password'])
-        request.user.save()
-
-        return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
-
+        try:
+            request.user.set_password(serializer.validated_data['password'])
+            request.user.save()
+            return self.success_response(message="رمز عبور با موفقیت تغییر کرد.")
+        except Exception as e:
+            return self.error_response(message=f"خطا در تغییر رمز عبور: {str(e)}")
 
 # -----------------------------------
 #  خروج کاربر و بلاک کردن توکن JWT
 # -----------------------------------
+
+
 class LogoutView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
@@ -253,6 +298,23 @@ class TestTokenView(APIView):
             "user_id": str(user.id),
             "user_full_name": user.get_full_name(),
         })
+
+
+# -----------------------------------
+#  خروج کاربر و بلاک کردن توکن JWT
+# -----------------------------------
+class LogoutView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh")
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+        except Exception:
+            pass
+        return Response({"detail": "خروج با موفقیت انجام شد."})
 
 
 # import re
