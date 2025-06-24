@@ -12,8 +12,13 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
                        'django-insecure-default-key-for-dev-only')
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
+
 ALLOWED_HOSTS = ['*']
-CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",]
+
+# CORS_ALLOW_ALL_ORIGINS = True
 # ========================
 # Installed apps & Middleware
 # ========================
@@ -28,7 +33,9 @@ INSTALLED_APPS = [
 
     # Third-party apps
     'rest_framework',
+
     'corsheaders',
+
     # Local apps
     'users',
 ]
@@ -36,10 +43,10 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'users.User'
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
