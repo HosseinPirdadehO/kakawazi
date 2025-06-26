@@ -16,8 +16,11 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",]
-
+    "http://localhost:3000",
+    "https://www.tda24.ir",
+    "https://tda24.ir",
+    "https://tda24.liara.run",
+]
 # CORS_ALLOW_ALL_ORIGINS = True
 # ========================
 # Installed apps & Middleware
