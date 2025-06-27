@@ -58,7 +58,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ]
     )
 
-    VEHICLE_TYPE_CHOICES = [
+    TYPE_OF_CAR_CHOICES = [
         ('van', 'ون'),
         ('car', 'سواری'),
         ('minibus', 'مینی‌بوس'),
@@ -86,10 +86,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=11, unique=True, null=True, blank=True, verbose_name='شماره پلاک'
     )
     type_of_car = models.CharField(
-        max_length=10, choices=VEHICLE_TYPE_CHOICES, null=True, blank=True, verbose_name='نوع ماشین'
+        max_length=10, choices=TYPE_OF_CAR_CHOICES, null=True, blank=True, verbose_name='نوع ماشین'
     )
 
-    # ✅ نقش شغلی
+    #  نقش شغلی
     job_role = models.CharField(
         max_length=20,
         choices=JOB_ROLE_CHOICES,
@@ -98,7 +98,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True
     )
 
-    # ✅ نقش سیستمی
+    # نقش سیستمی
     system_role = models.CharField(
         max_length=20,
         choices=SystemRole.choices,

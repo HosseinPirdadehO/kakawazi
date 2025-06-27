@@ -40,7 +40,7 @@ class StandardResponseMixin:
             ],
             "vehicle_types": [
                 {"value": value, "label": label}
-                for value, label in User.VEHICLE_TYPE_CHOICES
+                for value, label in User.TYPE_OF_CAR_CHOICES
             ],
             "status_options": [
                 {"value": value, "label": label}
