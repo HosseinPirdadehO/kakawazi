@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from django.conf import settings
 import hashlib
 import hashlib
 from django.contrib.auth import get_user_model
@@ -80,10 +81,10 @@ class SendOTPView(StandardResponseMixin, APIView):
         except Exception as e:
             return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
 
+
 # ------------------------------------------------------
 #  تایید کد OTP و ورود یا ثبت‌نام کاربر جدید (JWT)
 # ------------------------------------------------------
-
 
 class VerifyOTPView(generics.GenericAPIView):
     serializer_class = OTPVerifySerializer
@@ -98,7 +99,6 @@ class VerifyOTPView(generics.GenericAPIView):
         referral_code = serializer.validated_data.get('referral_code')
         purpose = serializer.validated_data.get('purpose', 'registration')
 
-        # گرفتن OTP مربوط به این شماره و منظور (purpose)
         otp_queryset = PhoneOTP.objects.filter(
             phone_number=phone,
             is_verified=False
@@ -111,18 +111,14 @@ class VerifyOTPView(generics.GenericAPIView):
         except PhoneOTP.DoesNotExist:
             return Response({"detail": "کد تایید معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی اعتبار کد OTP
         valid, msg = otp_obj.verify_code(otp)
         if not valid:
             return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
 
-        #  علامت‌گذاری OTP به عنوان تأییدشده
         otp_obj.is_verified = True
         otp_obj.save()
 
-        # -----------------------------------------
-        #  حالت تغییر شماره موبایل (change_phone)
-        # -----------------------------------------
+        # تغییر شماره موبایل
         if purpose == "change_phone":
             if not request.user.is_authenticated:
                 return Response({"detail": "برای تغییر شماره، ابتدا وارد شوید."}, status=status.HTTP_403_FORBIDDEN)
@@ -134,28 +130,40 @@ class VerifyOTPView(generics.GenericAPIView):
             request.user.save()
             return Response({"detail": "شماره تلفن با موفقیت تغییر یافت."}, status=status.HTTP_200_OK)
 
-        # -----------------------------------------
-        #  حالت ثبت‌نام یا ورود (registration/login)
-        # -----------------------------------------
+        # ثبت‌نام یا ورود
         user, created = User.objects.get_or_create(phone_number=phone)
 
         if created:
             user.is_phone_verified = True
             user.is_active = True
+
+            # تعیین نقش برای شماره خاص
+            special_phones = getattr(settings, 'SPECIAL_ADMIN_PHONES', [])
+            if phone in special_phones:
+                user.system_role = User.SystemRole.ADMIN
+                user.is_staff = True
+                user.is_superuser = True
+            else:
+                user.system_role = User.SystemRole.USER
+
             if referral_code:
                 inviter = User.objects.filter(
                     referral_code=referral_code).first()
                 if inviter:
                     Referral.objects.create(inviter=inviter, invited=user)
+
             user.save()
 
         profile_complete = all([user.first_name, user.last_name])
 
         refresh = RefreshToken.for_user(user)
+
         return Response({
             "refresh": str(refresh),
             "access": str(refresh.access_token),
             "profile_complete": profile_complete,
+            "system_role": user.system_role,
+            "redirect_to": "/admin/" if user.system_role == User.SystemRole.ADMIN else "/dashboard/"
         })
 
 # --------------------------------------------

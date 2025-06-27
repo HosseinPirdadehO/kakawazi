@@ -32,7 +32,7 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('plate_number', 'type_of_car')
         }),
         ("نقش و وضعیت", {
-            'fields': ('role', 'status', 'is_active', 'is_staff', 'is_superuser')
+            'fields': ('system_role', 'job_role', 'status', 'is_active', 'is_staff', 'is_superuser')
         }),
         ("سیستم ارجاع", {
             'fields': ('referral_code', 'referral')
@@ -40,24 +40,56 @@ class UserAdmin(BaseUserAdmin):
         ("زمان‌ها", {
             'fields': ('created_at', 'date_joined', 'last_login')
         }),
+        ("دسترسی‌ها", {
+            'fields': ('groups', 'user_permissions')
+        }),
     )
 
     add_fieldsets = (
         ("ساخت کاربر جدید", {
             'classes': ('wide',),
-            'fields': ('phone_number', 'password1', 'password2', 'is_staff', 'is_superuser'),
+            'fields': (
+                'phone_number',
+                'password1',
+                'password2',
+                'system_role',
+                'job_role',
+                'is_staff',
+                'is_superuser',
+                'is_active',
+            ),
         }),
     )
 
     list_display = (
-        'phone_number', 'get_full_name', 'role', 'status',
-        'is_active', 'is_phone_verified', 'referral_link', 'referral_count'
+        'phone_number',
+        'get_full_name',
+        'system_role',
+        'job_role',
+        'referral_link',
+        'referral_count',
+        'is_staff',
+        'is_active',
     )
-    list_filter = ('is_active', 'is_phone_verified',
-                   'status', 'role', 'created_at', 'is_staff')
-    search_fields = ('phone_number', 'first_name',
-                     'last_name', 'email', 'referral_code')
+
+    list_filter = (
+        'system_role',
+        'job_role',
+        'is_staff',
+        'is_active',
+        'status',
+    )
+
+    search_fields = (
+        'phone_number',
+        'first_name',
+        'last_name',
+        'email',
+        'referral_code',
+    )
+
     ordering = ('-created_at',)
+
     readonly_fields = ('created_at', 'date_joined',
                        'last_login', 'referral_code')
 
@@ -67,7 +99,7 @@ class UserAdmin(BaseUserAdmin):
 
     def referral_link(self, obj):
         if obj.referral:
-            return f"{obj.referral.get_full_name() or obj.referral.phone_number}"
+            return obj.referral.get_full_name() or obj.referral.phone_number
         return "-"
     referral_link.short_description = "دعوت‌کننده"
 

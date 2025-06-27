@@ -25,10 +25,16 @@ class UserManager(BaseUserManager):
     def create_superuser(self, phone_number, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("system_role", User.SystemRole.SUPERADMIN)
         return self.create_user(phone_number, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    class SystemRole(models.TextChoices):
+        USER = "USER", "کاربر عادی"
+        ADMIN = "ADMIN", "ادمین"
+        SUPERADMIN = "SUPERADMIN", "سوپر ادمین"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone_number = models.CharField(
         max_length=15, unique=True, verbose_name="شماره موبایل")
@@ -57,7 +63,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ('car', 'سواری'),
         ('minibus', 'مینی‌بوس'),
     ]
-    ROLE_CHOICES = [
+    JOB_ROLE_CHOICES = [
         ('school_manager', 'مدیر مدرسه'),
         ('taxi_driver', 'راننده تاکسی'),
         ('student', 'دانش‌آموز'),
@@ -77,25 +83,27 @@ class User(AbstractBaseUser, PermissionsMixin):
     image = models.URLField(null=True, blank=True, verbose_name="عکس پروفایل")
 
     plate_number = models.CharField(
-        max_length=11,
-        unique=True,
-        null=True,
-        blank=True,
-        verbose_name='شماره پلاک'
+        max_length=11, unique=True, null=True, blank=True, verbose_name='شماره پلاک'
     )
     type_of_car = models.CharField(
-        max_length=10,
-        choices=VEHICLE_TYPE_CHOICES,
-        null=True,
-        blank=True,
-        verbose_name='نوع ماشین'
+        max_length=10, choices=VEHICLE_TYPE_CHOICES, null=True, blank=True, verbose_name='نوع ماشین'
     )
-    role = models.CharField(
+
+    # ✅ نقش شغلی
+    job_role = models.CharField(
         max_length=20,
-        choices=ROLE_CHOICES,
+        choices=JOB_ROLE_CHOICES,
         verbose_name='نقش / شغل',
         null=True,
         blank=True
+    )
+
+    # ✅ نقش سیستمی
+    system_role = models.CharField(
+        max_length=20,
+        choices=SystemRole.choices,
+        default=SystemRole.USER,
+        verbose_name='نقش سیستمی'
     )
 
     is_active = models.BooleanField(default=True)
