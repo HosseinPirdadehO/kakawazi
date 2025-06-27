@@ -324,7 +324,15 @@ class LogoutView(generics.GenericAPIView):
             pass
         return Response({"detail": "خروج با موفقیت انجام شد."})
 
+# -----------------------------------
 
+
+class RoleListView(APIView, StandardResponseMixin):
+    def get(self, request):
+        roles_data = self.get_roles_data()
+        return self.success_response(data=roles_data)
+
+# -----------------------------------
 # import re
 # import hashlib
 # from rest_framework import serializers
