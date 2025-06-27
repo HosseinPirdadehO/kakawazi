@@ -114,7 +114,7 @@ DATDATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',          # نام دیتابیس
         'USER': 'root',              # یوزرنیم دیتابیس
-        'PASSWORD': 'sQ2vm8nDSXjIxb0Hs16K9VX2',  # رمز دیتابیس
+        'PASSWORD': 'zQQEXrzg719bzzRNKyAowok1',  # رمز دیتابیس
         'HOST': 'localhost',           # هاست دیتابیس
         'PORT': '5432',
     }
