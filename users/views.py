@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+from .serializers import TokenResponseSerializer
+from users.models import PhoneOTP, User
+from rest_framework.permissions import AllowAny
+from rest_framework import status
 from django.conf import settings
 import hashlib
 import hashlib
@@ -44,6 +48,51 @@ class UserListView(StandardResponseMixin, generics.ListAPIView):
 # -----------------------------------------------
 #  ارسال کد تایید (OTP) به شماره موبایل کاربر
 # -----------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+
+# اصلی
+# class SendOTPView(StandardResponseMixin, APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         phone_number = request.data.get('phone_number')
+#         purpose = request.data.get('purpose', 'registration')
+
+#         if not phone_number:
+#             return self.error_response(message="شماره موبایل ارسال نشده است.", status_code=status.HTTP_400_BAD_REQUEST)
+
+#         if purpose == "change_phone":
+#             if not request.user or not request.user.is_authenticated:
+#                 return self.error_response(message="برای تغییر شماره، ابتدا وارد شوید.", status_code=status.HTTP_403_FORBIDDEN)
+
+#             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
+#                 return self.error_response(message="این شماره قبلاً ثبت شده است.", status_code=status.HTTP_400_BAD_REQUEST)
+
+#         try:
+#             PhoneOTP.objects.filter(
+#                 phone_number=phone_number, is_verified=False, purpose=purpose).delete()
+
+#             raw_code = PhoneOTP.generate_code()
+#             hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
+
+#             PhoneOTP.objects.create(
+#                 phone_number=phone_number, code=hashed_code, purpose=purpose)
+
+#             success = send_sms(phone_number, raw_code)
+#             if success:
+#                 return self.success_response(message="کد تایید ارسال شد.")
+#             else:
+#                 return self.error_response(message="ارسال پیامک با خطا مواجه شد.", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         except Exception as e:
+#             return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
+
+# تست لوکال
 
 
 class SendOTPView(StandardResponseMixin, APIView):
@@ -53,40 +102,80 @@ class SendOTPView(StandardResponseMixin, APIView):
         phone_number = request.data.get('phone_number')
         purpose = request.data.get('purpose', 'registration')
 
+        # بررسی وجود شماره
         if not phone_number:
-            return self.error_response(message="شماره موبایل ارسال نشده است.", status_code=status.HTTP_400_BAD_REQUEST)
+            return self.error_response(
+                message="شماره موبایل ارسال نشده است.",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
 
+        # اعتبارسنجی برای تغییر شماره
         if purpose == "change_phone":
             if not request.user or not request.user.is_authenticated:
-                return self.error_response(message="برای تغییر شماره، ابتدا وارد شوید.", status_code=status.HTTP_403_FORBIDDEN)
+                return self.error_response(
+                    message="برای تغییر شماره، ابتدا وارد شوید.",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
 
             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
-                return self.error_response(message="این شماره قبلاً ثبت شده است.", status_code=status.HTTP_400_BAD_REQUEST)
+                return self.error_response(
+                    message="این شماره قبلاً ثبت شده است.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
 
         try:
+            # حذف کدهای قبلی
             PhoneOTP.objects.filter(
-                phone_number=phone_number, is_verified=False, purpose=purpose).delete()
+                phone_number=phone_number,
+                is_verified=False,
+                purpose=purpose
+            ).delete()
 
+            # تولید و ذخیره کد جدید
             raw_code = PhoneOTP.generate_code()
             hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
 
             PhoneOTP.objects.create(
-                phone_number=phone_number, code=hashed_code, purpose=purpose)
+                phone_number=phone_number,
+                code=hashed_code,
+                purpose=purpose
+            )
 
-            success = send_sms(phone_number, raw_code)
-            if success:
+            # ارسال یا بازگشت کد در حالت تست
+            result = send_sms(phone_number, raw_code)
+
+            if isinstance(result, str):
+                return self.success_response(
+                    message="کد تایید (تست) ایجاد شد.",
+                    data={"test_code": result}
+                )
+
+            if result is True:
                 return self.success_response(message="کد تایید ارسال شد.")
-            else:
-                return self.error_response(message="ارسال پیامک با خطا مواجه شد.", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return self.error_response(
+                message="ارسال پیامک با خطا مواجه شد.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
         except Exception as e:
-            return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
-
-
+            return self.error_response(
+                message=f"خطا در ارسال کد تایید: {str(e)}",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
+# ------------------------------------------------------
 # ------------------------------------------------------
 #  تایید کد OTP و ورود یا ثبت‌نام کاربر جدید (JWT)
 # ------------------------------------------------------
 
-class VerifyOTPView(generics.GenericAPIView):
+
+class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
     serializer_class = OTPVerifySerializer
     permission_classes = [AllowAny]
 
@@ -100,8 +189,7 @@ class VerifyOTPView(generics.GenericAPIView):
         purpose = serializer.validated_data.get('purpose', 'registration')
 
         otp_queryset = PhoneOTP.objects.filter(
-            phone_number=phone,
-            is_verified=False
+            phone_number=phone, is_verified=False
         )
         if purpose:
             otp_queryset = otp_queryset.filter(purpose=purpose)
@@ -109,11 +197,11 @@ class VerifyOTPView(generics.GenericAPIView):
         try:
             otp_obj = otp_queryset.latest('created_at')
         except PhoneOTP.DoesNotExist:
-            return Response({"detail": "کد تایید معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            return self.error_response(message="کد تایید معتبر نیست.")
 
         valid, msg = otp_obj.verify_code(otp)
         if not valid:
-            return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return self.error_response(message=msg)
 
         otp_obj.is_verified = True
         otp_obj.save()
@@ -121,14 +209,20 @@ class VerifyOTPView(generics.GenericAPIView):
         # تغییر شماره موبایل
         if purpose == "change_phone":
             if not request.user.is_authenticated:
-                return Response({"detail": "برای تغییر شماره، ابتدا وارد شوید."}, status=status.HTTP_403_FORBIDDEN)
+                return self.error_response(
+                    message="برای تغییر شماره، ابتدا وارد شوید.",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
 
             if User.objects.filter(phone_number=phone).exclude(id=request.user.id).exists():
-                return Response({"detail": "این شماره قبلاً توسط کاربر دیگری استفاده شده است."}, status=status.HTTP_400_BAD_REQUEST)
+                return self.error_response(
+                    message="این شماره قبلاً توسط کاربر دیگری استفاده شده است.",
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
 
             request.user.phone_number = phone
             request.user.save()
-            return Response({"detail": "شماره تلفن با موفقیت تغییر یافت."}, status=status.HTTP_200_OK)
+            return self.success_response(message="شماره تلفن با موفقیت تغییر یافت.", user=request.user)
 
         # ثبت‌نام یا ورود
         user, created = User.objects.get_or_create(phone_number=phone)
@@ -137,7 +231,6 @@ class VerifyOTPView(generics.GenericAPIView):
             user.is_phone_verified = True
             user.is_active = True
 
-            # تعیین نقش برای شماره خاص
             special_phones = getattr(settings, 'SPECIAL_ADMIN_PHONES', [])
             if phone in special_phones:
                 user.system_role = User.SystemRole.ADMIN
@@ -155,16 +248,24 @@ class VerifyOTPView(generics.GenericAPIView):
             user.save()
 
         profile_complete = all([user.first_name, user.last_name])
-
         refresh = RefreshToken.for_user(user)
 
-        return Response({
+        # آماده‌سازی خروجی با Serializer
+        token_data = {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
             "profile_complete": profile_complete,
-            "system_role": user.system_role,
-            "redirect_to": "/admin/" if user.system_role == User.SystemRole.ADMIN else "/dashboard/"
-        })
+        }
+
+        serializer = TokenResponseSerializer(data=token_data)
+        serializer.is_valid(raise_exception=True)
+
+        # پاسخ نهایی با استاندارد یکسان
+        return self.success_response(
+            message="ورود یا ثبت‌نام با موفقیت انجام شد.",
+            data=serializer.data,
+            user=user  # برای ارسال selected_roles و full_name
+        )
 
 # --------------------------------------------
 #  ورود با رمز عبور (در صورت تنظیم قبلی)
@@ -250,24 +351,6 @@ class SetPasswordView(StandardResponseMixin, generics.GenericAPIView):
             return self.success_response(message="رمز عبور با موفقیت تغییر کرد.")
         except Exception as e:
             return self.error_response(message=f"خطا در تغییر رمز عبور: {str(e)}")
-
-# -----------------------------------
-#  خروج کاربر و بلاک کردن توکن JWT
-# -----------------------------------
-
-
-class LogoutView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-        except Exception:
-            pass
-        return Response({"detail": "خروج با موفقیت انجام شد."})
 
 
 # ------------------------------------------------

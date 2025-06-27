@@ -26,7 +26,7 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image')
         }),
         ("موقعیت جغرافیایی", {
-            'fields': ('state', 'city')
+            'fields': ('state', 'city', 'nameـschool')
         }),
         ("اطلاعات ماشین", {
             'fields': ('plate_number', 'type_of_car')
@@ -53,6 +53,7 @@ class UserAdmin(BaseUserAdmin):
                 'password1',
                 'password2',
                 'system_role',
+                'nameـschool'
                 'job_role',
                 'is_staff',
                 'is_superuser',
@@ -67,6 +68,7 @@ class UserAdmin(BaseUserAdmin):
         'system_role',
         'job_role',
         'referral_link',
+        'nameـschool',
         'referral_count',
         'is_staff',
         'is_active',

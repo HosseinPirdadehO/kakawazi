@@ -39,3 +39,6 @@ urlpatterns = [
 # git commit -m 'june4'
 # git branch -M main
 # git push -u origin main
+
+
+# 'june27q'

@@ -5,7 +5,7 @@ from .models import User
 
 class StandardResponseMixin:
     def success_response(self, message="عملیات با موفقیت انجام شد.", data=None,
-                         status_code=status.HTTP_200_OK, user=None, include_roles=True):
+                         status_code=status.HTTP_200_OK, user=None):
         response_data = {
             "success": True,
             "message": message,
@@ -15,8 +15,13 @@ class StandardResponseMixin:
         if user and hasattr(user, 'system_role'):
             response_data["role"] = user.system_role
 
-        if include_roles:
-            response_data["roles"] = self.get_roles_data()
+        if user:
+            response_data["selected_roles"] = {
+                "system_role": getattr(user, 'system_role', None),
+                "job_role": getattr(user, 'job_role', None),
+                "type_of_car": getattr(user, 'type_of_car', None),
+                "status": getattr(user, 'status', None),
+            }
 
         return Response(response_data, status=status_code)
 
@@ -27,23 +32,3 @@ class StandardResponseMixin:
             "message": message,
             "data": data
         }, status=status_code)
-
-    def get_roles_data(self):
-        return {
-            "system_roles": [
-                {"value": role.value, "label": role.label}
-                for role in User.SystemRole
-            ],
-            "job_roles": [
-                {"value": value, "label": label}
-                for value, label in User.JOB_ROLE_CHOICES
-            ],
-            "vehicle_types": [
-                {"value": value, "label": label}
-                for value, label in User.TYPE_OF_CAR_CHOICES
-            ],
-            "status_options": [
-                {"value": value, "label": label}
-                for value, label in User.STATUS_CHOICES
-            ]
-        }

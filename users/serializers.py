@@ -13,7 +13,7 @@ class SimpleUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
         fields = ['id', 'phone_number', 'first_name',
-                  'last_name', 'referral_code']
+                  'last_name', 'referral_code',]
 
 
 # ------------------------------
@@ -107,7 +107,9 @@ class ProfileCompleteSerializer(serializers.ModelSerializer):
         fields = [
             "first_name", "last_name", "email", "birth_date",
             "city", "state", "national_code", "plate_number",
-            "type_of_car", "role", "password", "password_confirm", 'referral_code',
+            "type_of_car", "system_role", "job_role",
+            "password", "password_confirm", 'referral_code',
+            'nameـschool',
         ]
 
     def validate(self, attrs):
@@ -131,10 +133,11 @@ class ProfileCompleteSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
 # ------------------------------
 # لیست کاربران دعوت‌شده توسط رفرال
 # ------------------------------
+
+
 class InvitedUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -157,11 +160,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'referral_code',
             'birth_date',
             'city',
+            'nameـschool',
             'state',
             'national_code',
             'plate_number',
             'type_of_car',
-            'role',
+            'system_role',
+            'job_role',
+
         ]
         read_only_fields = ['id', 'phone_number', 'referral_code']
 
