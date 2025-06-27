@@ -23,10 +23,10 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('phone_number', 'password', 'is_phone_verified')
         }),
         ("اطلاعات شخصی", {
-            'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image')
+            'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image', 'name_school')
         }),
         ("موقعیت جغرافیایی", {
-            'fields': ('state', 'city', 'nameـschool')
+            'fields': ('state', 'city', )
         }),
         ("اطلاعات ماشین", {
             'fields': ('plate_number', 'type_of_car')
@@ -53,7 +53,7 @@ class UserAdmin(BaseUserAdmin):
                 'password1',
                 'password2',
                 'system_role',
-                'nameـschool'
+                'name_school',
                 'job_role',
                 'is_staff',
                 'is_superuser',
@@ -68,7 +68,7 @@ class UserAdmin(BaseUserAdmin):
         'system_role',
         'job_role',
         'referral_link',
-        'nameـschool',
+        'name_school',
         'referral_count',
         'is_staff',
         'is_active',
