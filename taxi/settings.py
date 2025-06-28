@@ -1,7 +1,8 @@
+from dotenv import load_dotenv
 import os
 from pathlib import Path
 from datetime import timedelta
-
+import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ========================
@@ -13,10 +14,9 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['tda24.liara.run', 'tda24.ir', 'www.tda24.ir']
 
 CORS_ALLOWED_ORIGINS = [
-
     "http://localhost:3000",
     "https://www.tda24.ir",
     "https://tda24.ir",
@@ -102,24 +102,20 @@ AUTH_PASSWORD_VALIDATORS = [
 # Database
 # ========================
 
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.postgres',
+#     }
+# }
+load_dotenv()
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.postgres',
-    }
+    'default': dj_database_url.parse(
+        os.environ.get('DATABASE_URL')
+    )
 }
-
-DATDATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',          # نام دیتابیس
-        'USER': 'root',              # یوزرنیم دیتابیس
-        'PASSWORD': 'zQQEXrzg719bzzRNKyAowok1',  # رمز دیتابیس
-        'HOST': 'localhost',           # هاست دیتابیس
-        'PORT': '5432',
-    }
-}
-
 # ========================
 # Internationalization
 # ========================
