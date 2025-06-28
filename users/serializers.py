@@ -1,3 +1,4 @@
+from .models import User
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from users.models import Referral, PhoneOTP
@@ -45,6 +46,7 @@ class LoginPasswordSerializer(serializers.Serializer):
 # ------------------------------
 # ارسال شماره موبایل
 # ------------------------------
+
 class PhoneNumberSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
 
@@ -52,6 +54,7 @@ class PhoneNumberSerializer(serializers.Serializer):
 # ------------------------------
 # تایید کد OTP
 # ------------------------------
+
 class OTPVerifySerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
     otp = serializers.CharField(max_length=4)
@@ -148,31 +151,47 @@ class InvitedUserSerializer(serializers.ModelSerializer):
 # ------------------------------
 # مشاهده یا ویرایش پروفایل کاربر
 # ------------------------------
-class UserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            'id',
-            'phone_number',
-            'first_name',
-            'last_name',
-            'email',
-            'referral_code',
-            'birth_date',
-            'city',
-            'school',
-            'state',
-            'national_code',
-            'plate_number',
-            'type_of_car',
-            'system_role',
-            'job_role',
-
-        ]
-        read_only_fields = ['id', 'phone_number', 'referral_code']
-
-
 class TokenResponseSerializer(serializers.Serializer):
     refresh = serializers.CharField()
     access = serializers.CharField()
     profile_complete = serializers.BooleanField()
+
+
+class FullUserProfileSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    referral_code = serializers.CharField(read_only=True)
+    referrals_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "phone_number",
+            "is_phone_verified",
+            "first_name",
+            "last_name",
+            "full_name",
+            "email",
+            "birth_date",
+            "city",
+            "state",
+            "school",
+            "image",
+            "national_code",
+            "plate_number",
+            "type_of_car",
+            "job_role",
+            "system_role",
+            "status",
+            "referral_code",
+            "referrals_count",
+            "date_joined",
+            "created_at",
+            "last_login",
+        ]
+
+    def get_full_name(self, obj):
+        return obj.get_full_name()
+
+    def get_referrals_count(self, obj):
+        return obj.referrals.count()

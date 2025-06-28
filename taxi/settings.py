@@ -13,13 +13,20 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
                        'django-insecure-default-key-for-dev-only')
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
-
-ALLOWED_HOSTS = ['tda24.liara.run', 'tda24.ir', 'www.tda24.ir']
+ALLOWED_HOSTS = [
+    "tda24.liara.run",
+    "tda24.ir",
+    "www.tda24.ir",
+    "localhost",
+    "127.0.0.1",
+]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://www.tda24.ir",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "https://tda24.ir",
+    "https://www.tda24.ir",
     "https://tda24.liara.run",
 ]
 
@@ -102,13 +109,6 @@ AUTH_PASSWORD_VALIDATORS = [
 # Database
 # ========================
 
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.postgres',
-#     }
-# }
 load_dotenv()
 
 DATABASES = {
@@ -140,6 +140,7 @@ MEDIA_ROOT = os.getenv('DJANGO_MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
 # ========================
 # REST Framework & JWT
 # ========================
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -151,7 +152,7 @@ REST_FRAMEWORK = {
 
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }

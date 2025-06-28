@@ -1,6 +1,6 @@
 from rest_framework.response import Response
 from rest_framework import status
-from .models import User
+from .serializers import FullUserProfileSerializer
 
 
 class StandardResponseMixin:
@@ -12,16 +12,9 @@ class StandardResponseMixin:
             "data": data,
         }
 
-        if user and hasattr(user, 'system_role'):
-            response_data["role"] = user.system_role
-
         if user:
-            response_data["selected_roles"] = {
-                "system_role": getattr(user, 'system_role', None),
-                "job_role": getattr(user, 'job_role', None),
-                "type_of_car": getattr(user, 'type_of_car', None),
-                "status": getattr(user, 'status', None),
-            }
+            user_data = FullUserProfileSerializer(user).data
+            response_data["user"] = user_data
 
         return Response(response_data, status=status_code)
 

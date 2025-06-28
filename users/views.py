@@ -1,45 +1,44 @@
 # -*- coding: utf-8 -*-
-from .serializers import TokenResponseSerializer
-from users.models import PhoneOTP, User
-from rest_framework.permissions import AllowAny
-from rest_framework import status
+import hashlib
 from django.conf import settings
-import hashlib
-import hashlib
 from django.contrib.auth import get_user_model
-from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
+from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from .mixins import StandardResponseMixin
-from users.models import Referral
+from rest_framework import filters
 from .models import PhoneOTP
-from .sms_service import send_sms
+from users.models import Referral, User
 from .serializers import (
     PhoneNumberSerializer,
     OTPVerifySerializer,
+    TokenResponseSerializer,
     ProfileCompleteSerializer,
     LoginPasswordSerializer,
     SetPasswordSerializer,
     InvitedUserSerializer,
-    UserProfileSerializer
+    FullUserProfileSerializer
 )
+from .sms_service import send_sms
 from .mixins import StandardResponseMixin
-User = get_user_model()
-
 
 # --------------------------------------------
 # نمایش لیست کاربران
 # --------------------------------------------
+
+
 class UserListView(StandardResponseMixin, generics.ListAPIView):
     queryset = User.objects.all()
-    serializer_class = UserProfileSerializer
+    serializer_class = FullUserProfileSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['phone_number', 'first_name', 'last_name']
+    ordering_fields = ['created_at']
 
     def list(self, request, *args, **kwargs):
         try:
-            queryset = self.get_queryset()
+            queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
             return self.success_response(message="لیست کاربران دریافت شد.", data=serializer.data)
         except Exception as e:
@@ -189,8 +188,7 @@ class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
         purpose = serializer.validated_data.get('purpose', 'registration')
 
         otp_queryset = PhoneOTP.objects.filter(
-            phone_number=phone, is_verified=False
-        )
+            phone_number=phone, is_verified=False)
         if purpose:
             otp_queryset = otp_queryset.filter(purpose=purpose)
 
@@ -222,7 +220,10 @@ class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
 
             request.user.phone_number = phone
             request.user.save()
-            return self.success_response(message="شماره تلفن با موفقیت تغییر یافت.", user=request.user)
+            return self.success_response(
+                message="شماره تلفن با موفقیت تغییر یافت.",
+                user=request.user
+            )
 
         # ثبت‌نام یا ورود
         user, created = User.objects.get_or_create(phone_number=phone)
@@ -233,7 +234,7 @@ class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
 
             special_phones = getattr(settings, 'SPECIAL_ADMIN_PHONES', [])
             if phone in special_phones:
-                user.system_role = User.SystemRole.ADMIN
+                user.system_role = User.SystemRole.SUPERADMIN
                 user.is_staff = True
                 user.is_superuser = True
             else:
@@ -250,7 +251,6 @@ class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
         profile_complete = all([user.first_name, user.last_name])
         refresh = RefreshToken.for_user(user)
 
-        # آماده‌سازی خروجی با Serializer
         token_data = {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
@@ -260,11 +260,10 @@ class VerifyOTPView(StandardResponseMixin, generics.GenericAPIView):
         serializer = TokenResponseSerializer(data=token_data)
         serializer.is_valid(raise_exception=True)
 
-        # پاسخ نهایی با استاندارد یکسان
         return self.success_response(
             message="ورود یا ثبت‌نام با موفقیت انجام شد.",
             data=serializer.data,
-            user=user  # برای ارسال selected_roles و full_name
+            user=user
         )
 
 # --------------------------------------------
@@ -279,14 +278,22 @@ class LoginWithPasswordView(StandardResponseMixin, generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            return self.error_response(message="اطلاعات ورود نامعتبر است.", data=serializer.errors)
+            return self.error_response(
+                message="اطلاعات ورود نامعتبر است.",
+                data=serializer.errors
+            )
 
         user = serializer.validated_data['user']
         refresh = RefreshToken.for_user(user)
-        return self.success_response(message="ورود با رمز عبور موفقیت‌آمیز بود.", data={
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-        })
+
+        return self.success_response(
+            message="ورود با رمز عبور موفقیت‌آمیز بود.",
+            data={
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            },
+            user=user
+        )
 
 # ------------------------------------------------------
 #  تکمیل یا بروزرسانی اطلاعات پروفایل کاربر جاری
@@ -356,6 +363,7 @@ class SetPasswordView(StandardResponseMixin, generics.GenericAPIView):
 # ------------------------------------------------
 #  نمایش لیست کاربران دعوت‌شده توسط کاربر جاری
 # ------------------------------------------------
+
 class ReferralListView(generics.ListAPIView):
     serializer_class = InvitedUserSerializer
     permission_classes = [IsAuthenticated]
@@ -367,17 +375,19 @@ class ReferralListView(generics.ListAPIView):
 # --------------------------------------------------
 #  مشاهده یا ویرایش اطلاعات پروفایل کاربر جاری
 # --------------------------------------------------
-class UserProfileView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserProfileSerializer
+
+class FullUserProfileView(generics.RetrieveAPIView):
+    serializer_class = FullUserProfileSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user
 
-
 # ------------------------------------------------
 #  بررسی اعتبار توکن و اطلاعات کاربر از توکن JWT
 # ------------------------------------------------
+
+
 class TestTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -414,6 +424,7 @@ class RoleListView(APIView, StandardResponseMixin):
     def get(self, request):
         roles_data = self.get_roles_data()
         return self.success_response(data=roles_data)
+
 
 # -----------------------------------
 # import re
