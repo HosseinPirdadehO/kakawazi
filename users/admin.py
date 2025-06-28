@@ -23,7 +23,7 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('phone_number', 'password', 'is_phone_verified')
         }),
         ("اطلاعات شخصی", {
-            'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image', 'name_school')
+            'fields': ('first_name', 'last_name', 'email', 'birth_date', 'image', 'school')
         }),
         ("موقعیت جغرافیایی", {
             'fields': ('state', 'city', )
@@ -53,7 +53,7 @@ class UserAdmin(BaseUserAdmin):
                 'password1',
                 'password2',
                 'system_role',
-                'name_school',
+                'school',
                 'job_role',
                 'is_staff',
                 'is_superuser',
@@ -68,7 +68,7 @@ class UserAdmin(BaseUserAdmin):
         'system_role',
         'job_role',
         'referral_link',
-        'name_school',
+        'school',
         'referral_count',
         'is_staff',
         'is_active',

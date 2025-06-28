@@ -80,7 +80,7 @@ class User(AbstractBaseUser, PermissionsMixin):
                             null=True, verbose_name="شهر")
     state = models.CharField(max_length=100, blank=True,
                              null=True, verbose_name="استان")
-    name_school = models.CharField(
+    school = models.CharField(
         max_length=100, blank=True, null=True, verbose_name="نام مدرسه")
     image = models.URLField(null=True, blank=True, verbose_name="عکس پروفایل")
 

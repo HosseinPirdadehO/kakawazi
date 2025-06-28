@@ -109,7 +109,7 @@ class ProfileCompleteSerializer(serializers.ModelSerializer):
             "city", "state", "national_code", "plate_number",
             "type_of_car", "system_role", "job_role",
             "password", "password_confirm", 'referral_code',
-            'nameـschool',
+            'school',
         ]
 
     def validate(self, attrs):
@@ -160,7 +160,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'referral_code',
             'birth_date',
             'city',
-            'nameـschool',
+            'school',
             'state',
             'national_code',
             'plate_number',
