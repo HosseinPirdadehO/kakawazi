@@ -149,10 +149,9 @@ class User(AbstractBaseUser, PermissionsMixin):
             self.referral_code = self.generate_referral_code()
         super().save(*args, **kwargs)
 
-    def generate_referral_code(self, length=6):
-        characters = string.ascii_uppercase + string.digits
+    def generate_referral_code(self, length=4):
         while True:
-            code = ''.join(random.choices(characters, k=length))
+            code = ''.join(random.choices(string.digits, k=length))
             if not User.objects.filter(referral_code=code).exists():
                 return code
 

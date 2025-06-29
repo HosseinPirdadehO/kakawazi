@@ -47,51 +47,6 @@ class UserListView(StandardResponseMixin, generics.ListAPIView):
 # -----------------------------------------------
 #  ارسال کد تایید (OTP) به شماره موبایل کاربر
 # -----------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-
-# اصلی
-# class SendOTPView(StandardResponseMixin, APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         phone_number = request.data.get('phone_number')
-#         purpose = request.data.get('purpose', 'registration')
-
-#         if not phone_number:
-#             return self.error_response(message="شماره موبایل ارسال نشده است.", status_code=status.HTTP_400_BAD_REQUEST)
-
-#         if purpose == "change_phone":
-#             if not request.user or not request.user.is_authenticated:
-#                 return self.error_response(message="برای تغییر شماره، ابتدا وارد شوید.", status_code=status.HTTP_403_FORBIDDEN)
-
-#             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
-#                 return self.error_response(message="این شماره قبلاً ثبت شده است.", status_code=status.HTTP_400_BAD_REQUEST)
-
-#         try:
-#             PhoneOTP.objects.filter(
-#                 phone_number=phone_number, is_verified=False, purpose=purpose).delete()
-
-#             raw_code = PhoneOTP.generate_code()
-#             hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
-
-#             PhoneOTP.objects.create(
-#                 phone_number=phone_number, code=hashed_code, purpose=purpose)
-
-#             success = send_sms(phone_number, raw_code)
-#             if success:
-#                 return self.success_response(message="کد تایید ارسال شد.")
-#             else:
-#                 return self.error_response(message="ارسال پیامک با خطا مواجه شد.", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#         except Exception as e:
-#             return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
-
-# تست لوکال
 
 
 class SendOTPView(StandardResponseMixin, APIView):
@@ -101,74 +56,106 @@ class SendOTPView(StandardResponseMixin, APIView):
         phone_number = request.data.get('phone_number')
         purpose = request.data.get('purpose', 'registration')
 
-        # بررسی وجود شماره
         if not phone_number:
-            return self.error_response(
-                message="شماره موبایل ارسال نشده است.",
-                status_code=status.HTTP_400_BAD_REQUEST
-            )
+            return self.error_response(message="شماره موبایل ارسال نشده است.", status_code=status.HTTP_400_BAD_REQUEST)
 
-        # اعتبارسنجی برای تغییر شماره
         if purpose == "change_phone":
             if not request.user or not request.user.is_authenticated:
-                return self.error_response(
-                    message="برای تغییر شماره، ابتدا وارد شوید.",
-                    status_code=status.HTTP_403_FORBIDDEN
-                )
+                return self.error_response(message="برای تغییر شماره، ابتدا وارد شوید.", status_code=status.HTTP_403_FORBIDDEN)
 
             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
-                return self.error_response(
-                    message="این شماره قبلاً ثبت شده است.",
-                    status_code=status.HTTP_400_BAD_REQUEST
-                )
+                return self.error_response(message="این شماره قبلاً ثبت شده است.", status_code=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # حذف کدهای قبلی
             PhoneOTP.objects.filter(
-                phone_number=phone_number,
-                is_verified=False,
-                purpose=purpose
-            ).delete()
+                phone_number=phone_number, is_verified=False, purpose=purpose).delete()
 
-            # تولید و ذخیره کد جدید
             raw_code = PhoneOTP.generate_code()
             hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
 
             PhoneOTP.objects.create(
-                phone_number=phone_number,
-                code=hashed_code,
-                purpose=purpose
-            )
+                phone_number=phone_number, code=hashed_code, purpose=purpose)
 
-            # ارسال یا بازگشت کد در حالت تست
-            result = send_sms(phone_number, raw_code)
-
-            if isinstance(result, str):
-                return self.success_response(
-                    message="کد تایید (تست) ایجاد شد.",
-                    data={"test_code": result}
-                )
-
-            if result is True:
+            success = send_sms(phone_number, raw_code)
+            if success:
                 return self.success_response(message="کد تایید ارسال شد.")
-
-            return self.error_response(
-                message="ارسال پیامک با خطا مواجه شد.",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            else:
+                return self.error_response(message="ارسال پیامک با خطا مواجه شد.", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            return self.error_response(
-                message=f"خطا در ارسال کد تایید: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
-# ------------------------------------------------------
+            return self.error_response(message=f"خطا در ارسال کد تایید: {str(e)}")
+
+# تست لوکال
+
+
+# class SendOTPView(StandardResponseMixin, APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         phone_number = request.data.get('phone_number')
+#         purpose = request.data.get('purpose', 'registration')
+
+#         # بررسی وجود شماره
+#         if not phone_number:
+#             return self.error_response(
+#                 message="شماره موبایل ارسال نشده است.",
+#                 status_code=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         # اعتبارسنجی برای تغییر شماره
+#         if purpose == "change_phone":
+#             if not request.user or not request.user.is_authenticated:
+#                 return self.error_response(
+#                     message="برای تغییر شماره، ابتدا وارد شوید.",
+#                     status_code=status.HTTP_403_FORBIDDEN
+#                 )
+
+#             if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
+#                 return self.error_response(
+#                     message="این شماره قبلاً ثبت شده است.",
+#                     status_code=status.HTTP_400_BAD_REQUEST
+#                 )
+
+#         try:
+#             # حذف کدهای قبلی
+#             PhoneOTP.objects.filter(
+#                 phone_number=phone_number,
+#                 is_verified=False,
+#                 purpose=purpose
+#             ).delete()
+
+#             # تولید و ذخیره کد جدید
+#             raw_code = PhoneOTP.generate_code()
+#             hashed_code = hashlib.sha256(raw_code.encode()).hexdigest()
+
+#             PhoneOTP.objects.create(
+#                 phone_number=phone_number,
+#                 code=hashed_code,
+#                 purpose=purpose
+#             )
+
+#             # ارسال یا بازگشت کد در حالت تست
+#             result = send_sms(phone_number, raw_code)
+
+#             if isinstance(result, str):
+#                 return self.success_response(
+#                     message="کد تایید (تست) ایجاد شد.",
+#                     data={"test_code": result}
+#                 )
+
+#             if result is True:
+#                 return self.success_response(message="کد تایید ارسال شد.")
+
+#             return self.error_response(
+#                 message="ارسال پیامک با خطا مواجه شد.",
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
+#         except Exception as e:
+#             return self.error_response(
+#                 message=f"خطا در ارسال کد تایید: {str(e)}",
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
 # ------------------------------------------------------
 #  تایید کد OTP و ورود یا ثبت‌نام کاربر جدید (JWT)
 # ------------------------------------------------------

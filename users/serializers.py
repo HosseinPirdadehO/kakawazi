@@ -70,13 +70,13 @@ class OTPVerifySerializer(serializers.Serializer):
 class SetPasswordSerializer(serializers.Serializer):
     password = serializers.CharField(
         write_only=True,
-        min_length=6,
+        min_length=4,
         max_length=128,
         style={'input_type': 'password'}
     )
     password_confirm = serializers.CharField(
         write_only=True,
-        min_length=6,
+        min_length=4,
         max_length=128,
         style={'input_type': 'password'}
     )
@@ -101,9 +101,9 @@ class SetPasswordSerializer(serializers.Serializer):
 
 class ProfileCompleteSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
-        write_only=True, required=False, min_length=6)
+        write_only=True, required=False, min_length=4)
     password_confirm = serializers.CharField(
-        write_only=True, required=False, min_length=6)
+        write_only=True, required=False, min_length=4)
 
     class Meta:
         model = User
@@ -155,6 +155,10 @@ class TokenResponseSerializer(serializers.Serializer):
     refresh = serializers.CharField()
     access = serializers.CharField()
     profile_complete = serializers.BooleanField()
+
+# ------------------------------
+
+# ------------------------------
 
 
 class FullUserProfileSerializer(serializers.ModelSerializer):
