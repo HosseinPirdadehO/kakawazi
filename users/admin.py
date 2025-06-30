@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User, PhoneOTP, Referral
+from openpyxl import Workbook
+from openpyxl.styles import Font
+from django.http import HttpResponse
 
 
 # =================== Inline ===================
@@ -95,6 +98,57 @@ class UserAdmin(BaseUserAdmin):
     readonly_fields = ('created_at', 'date_joined',
                        'last_login', 'referral_code')
 
+    # ================ اکشن XLSX =================
+    actions = ["export_all_fields_as_xlsx"]
+
+    def export_all_fields_as_xlsx(self, request, queryset):
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Users"
+
+        # گرفتن همه فیلدهای مدل
+        model = self.model
+        field_names = [field.name for field in model._meta.get_fields()
+                       if not field.many_to_many and not field.one_to_many]
+
+        # نوشتن عنوان‌ها
+        bold_font = Font(bold=True)
+        for col_num, column_title in enumerate(field_names, 1):
+            cell = worksheet.cell(row=1, column=col_num, value=column_title)
+            cell.font = bold_font
+
+        # نوشتن داده‌ها
+        for row_num, obj in enumerate(queryset, 2):
+            for col_num, field in enumerate(field_names, 1):
+                try:
+                    value = getattr(obj, field, '')
+                    related_field = model._meta.get_field(field)
+
+                    # ForeignKey ها
+                    if related_field.is_relation and value:
+                        value = str(value)
+                    # تاریخ‌ها
+                    elif hasattr(value, 'strftime'):
+                        value = value.strftime("%Y-%m-%d %H:%M")
+                    # بقیه موارد (UUID, Decimal, JSON و ...)
+                    elif not isinstance(value, (str, int, float, bool, type(None))):
+                        value = str(value)
+                except Exception:
+                    value = ""
+
+                worksheet.cell(row=row_num, column=col_num, value=value)
+
+        # پاسخ HTTP
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=users_full.xlsx'
+        workbook.save(response)
+        return response
+
+    export_all_fields_as_xlsx.short_description = "دانلود کامل XLSX کاربران"
+
+    # ================ Helper methods =================
     def get_full_name(self, obj):
         return obj.get_full_name() or "—"
     get_full_name.short_description = 'نام کامل'
@@ -110,6 +164,7 @@ class UserAdmin(BaseUserAdmin):
     referral_count.short_description = "تعداد ارجاعات"
 
 
+# =================== PhoneOTPAdmin ===================
 @admin.register(PhoneOTP)
 class PhoneOTPAdmin(admin.ModelAdmin):
     list_display = (
@@ -125,6 +180,7 @@ class PhoneOTPAdmin(admin.ModelAdmin):
     is_expired_display.short_description = "منقضی؟"
 
 
+# =================== ReferralAdmin ===================
 @admin.register(Referral)
 class ReferralAdmin(admin.ModelAdmin):
     list_display = ('inviter_name', 'invited_name', 'created_at')
