@@ -50,6 +50,8 @@ INSTALLED_APPS = [
 
     # Local apps
     'users',
+    'wallet',
+
 ]
 
 AUTH_USER_MODEL = 'users.User'
